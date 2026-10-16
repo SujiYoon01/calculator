@@ -1,1 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>근무시간 계산기</title>
+<style>
+:root{--navy:#1E3358;--steel:#53728A;--sky:#7691AD;--coral:#C0392B;--bg:#EEF3F7;--border:#DCE5ED;--muted:#6C8098;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--navy);font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:13px;}
+.wrap{max-width:1300px;margin:0 auto;padding:24px 24px 60px;}
+h1{font-size:21px;margin:0 0 16px;}
+.card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:14px;}
+.card h2{margin:0 0 12px;font-size:15px;}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+input[type=text],textarea{border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--navy);font-family:inherit;}
+input[type=text]{flex:1;min-width:200px;}
+textarea{width:100%;height:60px;}
+button{background:var(--navy);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:12.5px;font-weight:700;cursor:pointer;}
+button.sub{background:var(--muted);}
+button.cand{background:#F3F7FA;color:var(--navy);border:1px solid var(--border);}
+button.cand:hover{background:#E4ECF2;}
+.note{color:var(--muted);font-size:12px;}
+.err{background:#FCE7E8;color:var(--coral);border:1px solid var(--coral);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-weight:700;display:none;}
+table{width:100%;border-collapse:collapse;}
+th{text-align:left;font-size:11.5px;color:var(--muted);padding:8px 8px;border-bottom:1.5px solid var(--border);position:sticky;top:0;background:#fff;}
+td{padding:8px;border-bottom:1px solid #EEF2F6;}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;}
+tr.total td{font-weight:800;background:#F3F7FA;}
+.wrapbox{max-height:480px;overflow:auto;}
+.over{color:var(--coral);font-weight:800;}
+.badge{display:inline-block;background:#FCEFDD;color:#C97A2B;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:800;margin-left:4px;}
+.opts label{display:inline-flex;gap:5px;align-items:center;margin-right:14px;}
+.opts .f{margin-top:10px;}
+.opts .f b{display:block;font-size:12px;margin-bottom:4px;}
+#detail{margin-top:12px;}
+.detail-box{background:#F6F9FB;border-radius:10px;padding:14px 16px;}
+.tabs{display:flex;gap:8px;margin-bottom:12px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>근무시간 계산기</h1>
+  <div class="err" id="err"></div>
+
+  <div class="card">
+    <h2>1. 데이터 불러오기</h2>
+    <div class="row">
+      <button id="loadBtn">CSV 불러오기</button>
+      <input type="file" id="fileInput" accept=".csv" style="display:none">
+      <span class="note" id="status">엑셀 → 다른 이름으로 저장 → CSV UTF-8로 저장한 파일을 선택하세요. (여러 달이 한 파일에 있어도 월별로 자동 분리)</span>
+    </div>
+    <details style="margin-top:12px;" class="opts">
+      <summary style="cursor:pointer;font-weight:700;">집계 옵션 (대시보드와 동일한 기본값)</summary>
+      <div class="f">
+        <label><input type="checkbox" id="optFloor" checked> 주 근무시간 최소 40시간으로 보정 (대시보드와 동일)</label>
+        <label>시간 단위
+          <select id="optUnit"><option value="60" selected>분 (원본 ÷60)</option><option value="1">시간 (그대로)</option></select>
+        </label>
+      </div>
+      <div class="f"><b>제외 구분 (쉼표 구분)</b><input type="text" id="optExType" value="근태예외자"></div>
+      <div class="f"><b>제외 직급 (쉼표 구분)</b><input type="text" id="optExRank" value="상무,전무,부사장"></div>
+      <div class="f"><b>제외 부서 (쉼표 구분)</b><input type="text" id="optExDept" value="우주사업부,우주사업총괄"></div>
+      <div class="f"><b>부서 병합 (한 줄에 하나, 원래부서→합칠부서)</b>
+        <textarea id="optMerge">체계기술2팀→제주우주센터
+제조팀→제주우주센터</textarea></div>
+      <div class="f"><button id="applyBtn">옵션 적용해서 다시 계산</button></div>
+    </details>
+  </div>
+
+  <div class="card">
+    <h2>2. 인원 검색</h2>
+    <div class="row">
+      <input type="text" id="q" placeholder="이름 또는 사번을 입력하세요">
+      <button id="searchBtn">검색</button>
+      <button class="sub" id="resetBtn">초기화</button>
+    </div>
+    <div id="cands" class="row" style="margin-top:12px;"></div>
+    <div id="detail"></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px;">
+      <h2 style="margin:0;">3. 부서별 평균 근무시간</h2>
+      <button class="sub" id="dlDept">CSV 저장</button>
+    </div>
+    <div class="note" id="deptNote" style="margin-bottom:8px;">월별 값 = 해당 월 부서 소속 인원의 개인별 월평균을 평균한 값. 52h↑ = 월평균 52시간 이상 인원.</div>
+    <div class="wrapbox"><table><thead id="deptHead"></thead><tbody id="deptBody"></tbody></table></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px;">
+      <h2 style="margin:0;">4. 개인별 월 평균 근무시간</h2>
+      <div class="row">
+        <select id="deptFilter"><option value="all">부서 전체</option></select>
+        <button class="sub" id="dlPerson">CSV 저장</button>
+      </div>
+    </div>
+    <div class="wrapbox"><table><thead id="perHead"></thead><tbody id="perBody"></tbody></table></div>
+  </div>
+</div>
+
+<script>
+let ROWS=[], PERSONS={}, MONTHS=[], DEPTS=[], RESULT_DEPT=[], RESULT_PERSON=[];
+const $=id=>document.getElementById(id);
+const REQUIRED=['구분','년월','주차','사번','이름','직급','부서명','주확정근무시간'];
+const fmt1=n=>(Math.round(n*10)/10).toFixed(1);
+const mLabel=m=>String(m).length>=6?parseInt(String(m).slice(4,6),10)+'월':m;
+const split=s=>s.split(',').map(x=>x.trim()).filter(Boolean);
+function showErr(m){$('err').textContent=m;$('err').style.display='block';}
+function clearErr(){$('err').style.display='none';}
+
+/* CSV 파서 (따옴표/탭 구분 대응) */
+function parseCSV(text){
+  text=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+  const first=text.split('\n',1)[0]||'';
+  const D=(first.match(/\t/g)||[]).length>(first.match(/,/g)||[]).length?'\t':',';
+  const rows=[];let row=[],f='',q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if(c==='"') q=true;
+    else if(c===D){row.push(f);f='';}
+    else if(c==='\n'){row.push(f);rows.push(row);row=[];f='';}
+    else f+=c;
+  }
+  if(f.length||row.length){row.push(f);rows.push(row);}
+  if(!rows.length) return {data:[],fields:[]};
+  const header=rows[0].map(h=>h.trim());
+  const data=[];
+  for(let r=1;r<rows.length;r++){
+    if(rows[r].length===1&&rows[r][0]==='') continue;
+    const o={}; header.forEach((h,i)=>{o[h]=rows[r][i]!==undefined?rows[r][i].trim():'';});
+    if(o['사번']) o['사번']=String(o['사번']).replace(/\s+/g,'').replace(/\.0+$/,'').replace(/^0+/,'');
+    data.push(o);
+  }
+  return {data,fields:header};
+}
+
+$('loadBtn').onclick=()=>$('fileInput').click();
+$('fileInput').onchange=e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const rd=new FileReader();
+  rd.onload=ev=>{
+    const buf=ev.target.result, b=new Uint8Array(buf.slice(0,4));
+    if(b[0]===0x50&&b[1]===0x4B){ showErr('.xlsx 파일입니다. 엑셀에서 "CSV UTF-8(쉼표로 분리)"로 저장한 뒤 다시 선택해주세요.'); return; }
+    let text;
+    if(b[0]===0xFF&&b[1]===0xFE) text=new TextDecoder('utf-16le').decode(buf);
+    else if(b[0]===0xFE&&b[1]===0xFF) text=new TextDecoder('utf-16be').decode(buf);
+    else { try{text=new TextDecoder('utf-8',{fatal:true}).decode(buf);}catch(_){ try{text=new TextDecoder('euc-kr').decode(buf);}catch(__){text=new TextDecoder('utf-8').decode(buf);} } }
+    const p=parseCSV(text);
+    const miss=REQUIRED.filter(c=>!p.fields.includes(c));
+    if(miss.length){ showErr('다음 열을 찾지 못했습니다: '+miss.join(', ')+' (인식된 열: '+p.fields.join(', ')+')'); return; }
+    ROWS=p.data.filter(r=>r['사번']);
+    $('status').textContent=`불러온 파일: ${file.name} (전체 ${ROWS.length}행)`;
+    clearErr(); compute();
+  };
+  rd.readAsArrayBuffer(file);
+};
+$('applyBtn').onclick=()=>{ if(ROWS.length) compute(); };
+
+/* 핵심 계산 */
+function compute(){
+  const exType=split($('optExType').value), exRank=split($('optExRank').value), exDept=split($('optExDept').value);
+  const merge={}; $('optMerge').value.split('\n').forEach(l=>{const m=l.split('→'); if(m.length===2) merge[m[0].trim()]=m[1].trim();});
+  const unit=parseFloat($('optUnit').value)||60, floor=$('optFloor').checked;
+  PERSONS={}; const monthSet=new Set(); let used=0;
+  ROWS.forEach(r=>{
+    const dept=merge[r['부서명']]||r['부서명'];
+    if(exType.includes(r['구분'])||exRank.includes(r['직급'])||exDept.includes(dept)) return;
+    const h=(parseFloat(r['주확정근무시간'])||0)/unit;
+    if(h<=0) return;
+    const q=floor?Math.max(40,h):h;
+    const id=r['사번'], m=r['년월'];
+    monthSet.add(m); used++;
+    const p=PERSONS[id]||(PERSONS[id]={id,name:r['이름'],rank:r['직급'],dept,months:{}});
+    p.name=r['이름']; p.rank=r['직급']; p.dept=dept;
+    (p.months[m]=p.months[m]||[]).push({week:r['주차'],raw:h,q});
+  });
+  MONTHS=[...monthSet].sort();
+  if(!used){ showErr('집계 가능한 행이 0건입니다. 제외 옵션/시간 단위를 확인해주세요.'); return; }
+  clearErr();
+  const dupCount={}; Object.values(PERSONS).forEach(p=>{dupCount[p.name]=(dupCount[p.name]||0)+1;});
+  Object.values(PERSONS).forEach(p=>{
+    p.dup=dupCount[p.name]>1; p.avg={};
+    MONTHS.forEach(m=>{ const w=p.months[m]; p.avg[m]=w?w.reduce((s,x)=>s+x.q,0)/w.length:null; });
+    const vals=MONTHS.map(m=>p.avg[m]).filter(v=>v!==null);
+    p.period=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+    p.nWeeks=Object.values(p.months).reduce((s,w)=>s+w.length,0);
+  });
+  DEPTS=[...new Set(Object.values(PERSONS).map(p=>p.dept))].sort((a,b)=>a.localeCompare(b,'ko'));
+  const sel=$('deptFilter'); const prev=sel.value;
+  sel.innerHTML='<option value="all">부서 전체</option>'+DEPTS.map(d=>`<option>${d}</option>`).join('');
+  if(DEPTS.includes(prev)) sel.value=prev;
+  renderDept(); renderPerson(); handleSearch(true);
+}
+
+function mean(a){return a.length?a.reduce((x,y)=>x+y,0)/a.length:null;}
+function statsFor(list){
+  const o={n:list.length,months:{},over:{}};
+  MONTHS.forEach(m=>{ const v=list.map(p=>p.avg[m]).filter(x=>x!==null); o.months[m]=mean(v); o.over[m]=v.filter(x=>x>=52).length; o.months[m+'_n']=v.length; });
+  o.period=mean(list.map(p=>p.period).filter(x=>x!==null));
+  return o;
+}
+function renderDept(){
+  $('deptHead').innerHTML='<tr><th>부서</th><th class="n">인원</th>'+MONTHS.map(m=>`<th class="n">${mLabel(m)} 평균</th><th class="n">${mLabel(m)} 52h↑</th>`).join('')+'<th class="n">기간 평균</th></tr>';
+  const all=Object.values(PERSONS);
+  const mk=(label,list,cls)=>{const s=statsFor(list); return {label,s,cls};};
+  const rows=DEPTS.map(d=>mk(d,all.filter(p=>p.dept===d),'')); rows.push(mk('전체',all,'total'));
+  RESULT_DEPT=rows;
+  $('deptBody').innerHTML=rows.map(r=>`<tr class="${r.cls}"><td>${r.label}</td><td class="n">${r.s.n}</td>`+
+    MONTHS.map(m=>{const v=r.s.months[m]; return `<td class="n">${v===null?'-':fmt1(v)}</td><td class="n">${r.s.months[m+'_n']?r.s.over[m]:'-'}</td>`;}).join('')+
+    `<td class="n">${r.s.period===null?'-':fmt1(r.s.period)}</td></tr>`).join('');
+}
+function renderPerson(){
+  $('perHead').innerHTML='<tr><th>사번</th><th>이름</th><th>직급</th><th>부서</th>'+MONTHS.map(m=>`<th class="n">${mLabel(m)}</th>`).join('')+'<th class="n">기간 평균</th><th class="n">집계 주수</th></tr>';
+  const d=$('deptFilter').value;
+  let list=Object.values(PERSONS).filter(p=>d==='all'||p.dept===d);
+  list.sort((a,b)=>a.dept.localeCompare(b.dept,'ko')||(b.period||0)-(a.period||0));
+  RESULT_PERSON=list;
+  $('perBody').innerHTML=list.map(p=>`<tr><td>${p.id}</td><td>${p.name}${p.dup?'<span class="badge">동명이인</span>':''}</td><td>${p.rank}</td><td>${p.dept}</td>`+
+    MONTHS.map(m=>{const v=p.avg[m]; return `<td class="n ${v>=52?'over':''}">${v===null?'-':fmt1(v)}</td>`;}).join('')+
+    `<td class="n ${p.period>=52?'over':''}">${p.period===null?'-':fmt1(p.period)}</td><td class="n">${p.nWeeks}</td></tr>`).join('')||'<tr><td colspan="9" class="note">해당자 없음</td></tr>';
+}
+$('deptFilter').onchange=renderPerson;
+
+/* 검색 (이름 또는 사번, 동명이인 구분) */
+function handleSearch(keep){
+  const q=$('q').value.trim();
+  const c=$('cands'), d=$('detail');
+  if(!q){ c.innerHTML=''; d.innerHTML=''; return; }
+  if(!Object.keys(PERSONS).length){ c.innerHTML='<span class="note">먼저 CSV를 불러와주세요.</span>'; return; }
+  const exact=PERSONS[q.replace(/^0+/,'')];
+  let found=exact?[exact]:Object.values(PERSONS).filter(p=>p.name.includes(q)||p.id.includes(q));
+  if(!found.length){ c.innerHTML='<span class="note">검색 결과가 없습니다. (제외 대상이거나 근무시간 0인 인원일 수 있음)</span>'; d.innerHTML=''; return; }
+  if(found.length===1){ c.innerHTML=''; showDetail(found[0].id); return; }
+  c.innerHTML=found.map(p=>`<button class="cand" data-id="${p.id}">${p.name} · ${p.dept} · ${p.rank} · ${p.id}${p.dup?' (동명이인)':''}</button>`).join('');
+  c.querySelectorAll('button').forEach(b=>b.onclick=()=>showDetail(b.dataset.id));
+  d.innerHTML='<p class="note">동명이인/복수 결과입니다. 해당 인원을 선택하세요.</p>';
+}
+function showDetail(id){
+  const p=PERSONS[id]; if(!p) return;
+  const body=MONTHS.map(m=>{
+    const w=p.months[m];
+    if(!w) return `<tr><td>${mLabel(m)}</td><td colspan="2" class="note">데이터 없음</td><td class="n">-</td></tr>`;
+    return `<tr><td>${mLabel(m)}</td><td>${w.map(x=>`${x.week} ${fmt1(x.q)}`).join(' / ')}</td><td class="n">${w.length}주</td><td class="n ${p.avg[m]>=52?'over':''}"><b>${fmt1(p.avg[m])}</b></td></tr>`;
+  }).join('');
+  $('detail').innerHTML=`<div class="detail-box"><div style="font-size:16px;font-weight:800;margin-bottom:2px;">${p.name} <span class="note">${p.rank} · ${p.dept} · 사번 ${p.id}</span></div>
+  <div style="margin:6px 0 10px;">기간 평균 <b>${p.period===null?'-':fmt1(p.period)}시간</b></div>
+  <table><thead><tr><th>월</th><th>주차별 근무시간</th><th class="n">주 수</th><th class="n">월 평균</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+$('searchBtn').onclick=()=>handleSearch();
+$('q').addEventListener('keydown',e=>{if(e.key==='Enter') handleSearch();});
+$('resetBtn').onclick=()=>{$('q').value='';$('cands').innerHTML='';$('detail').innerHTML='';};
+
+/* CSV 저장 */
+function dl(rows,name){
+  const esc=v=>{const s=String(v??'');return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;};
+  const txt='\uFEFF'+rows.map(r=>r.map(esc).join(',')).join('\r\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([txt],{type:'text/csv;charset=utf-8'}));
+  a.download=name; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+}
+$('dlDept').onclick=()=>{
+  if(!RESULT_DEPT.length) return alert('먼저 CSV를 불러와주세요.');
+  const h=['부서','인원']; MONTHS.forEach(m=>{h.push(mLabel(m)+' 평균',mLabel(m)+' 52h이상');}); h.push('기간 평균');
+  dl([h,...RESULT_DEPT.map(r=>[r.label,r.s.n,...MONTHS.flatMap(m=>[r.s.months[m]===null?'':fmt1(r.s.months[m]),r.s.months[m+'_n']?r.s.over[m]:'']),r.s.period===null?'':fmt1(r.s.period)])],'부서별_근무시간.csv');
+};
+$('dlPerson').onclick=()=>{
+  if(!RESULT_PERSON.length) return alert('먼저 CSV를 불러와주세요.');
+  const h=['사번','이름','직급','부서',...MONTHS.map(mLabel),'기간 평균','집계 주수'];
+  dl([h,...RESULT_PERSON.map(p=>[p.id,p.name,p.rank,p.dept,...MONTHS.map(m=>p.avg[m]===null?'':fmt1(p.avg[m])),p.period===null?'':fmt1(p.period),p.nWeeks])],'개인별_근무시간.csv');
+};
+</script>
+</body>
+</html>
 
