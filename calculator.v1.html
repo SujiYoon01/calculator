@@ -1,1 +1,371 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>월 평균 근무시간 계산기</title>
+<style>
+  :root{
+    --navy:#23305a; --slate:#6f7f9c; --bg:#eef1f7; --card:#fff; --line:#e3e8f2;
+    --accent:#3b5bdb; --warn:#c2410c; --warn-bg:#fff4ec;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--navy);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;}
+  .wrap{max-width:1100px;margin:0 auto;padding:28px 18px 60px}
+  h1{font-size:28px;margin:0 0 18px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  .btn{display:inline-block;border:0;border-radius:999px;padding:14px 26px;font-size:16px;font-weight:700;
+    cursor:pointer;color:#fff;background:var(--navy)}
+  .btn.ghost{background:var(--slate)}
+  .opt{font-size:14px;color:var(--slate);display:flex;align-items:center;gap:6px}
+  .fileinfo{margin:12px 2px 0;font-size:14px;color:var(--slate);line-height:1.5}
+  .card{background:var(--card);border-radius:24px;padding:22px 24px;margin-top:18px;
+    box-shadow:0 6px 24px rgba(35,48,90,.06)}
+  .card h2{font-size:19px;margin:0 0 14px}
+  .search{display:flex;gap:10px}
+  .search input{flex:1;min-width:0;border:2px solid var(--line);border-radius:999px;padding:14px 20px;font-size:16px;
+    color:var(--navy);outline:none}
+  .search input:focus{border-color:var(--accent)}
+  .search button{white-space:nowrap}
+  .hint{font-size:13px;color:var(--slate);margin-top:10px}
+  .person{border:1px solid var(--line);border-radius:18px;padding:16px 18px;margin-top:14px}
+  .person.excluded{background:var(--warn-bg);border-color:#f6d3bd}
+  .p-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:flex-start}
+  .p-name{font-size:20px;font-weight:800}
+  .p-meta{font-size:13px;color:var(--slate);margin-top:4px;line-height:1.6}
+  .p-avg{text-align:right}
+  .p-avg b{font-size:30px}
+  .p-avg span{font-size:13px;color:var(--slate);display:block}
+  .tag{display:inline-block;font-size:12px;padding:2px 9px;border-radius:999px;background:var(--bg);color:var(--slate);margin-left:6px;font-weight:600}
+  .tag.warn{background:#ffe3d1;color:var(--warn)}
+  .tag.cap{background:#e7ecff;color:var(--accent)}
+  .banner{margin-top:10px;font-size:14px;color:var(--warn);font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}
+  th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  th{font-size:12px;color:var(--slate);font-weight:700}
+  .scroll{overflow-x:auto}
+  tr.org{cursor:pointer}
+  tr.org:hover{background:#f6f8fc}
+  tr.org td:first-child{font-weight:700}
+  tr.total td{font-weight:800;background:#f6f8fc}
+  tr.dept{display:none;background:#fafbfe}
+  tr.dept.open{display:table-row}
+  tr.dept td:first-child{padding-left:28px;color:var(--slate)}
+  .chip{font-size:11px;background:var(--navy);color:#fff;border-radius:999px;padding:2px 8px;margin-left:6px;font-weight:600}
+  .bar{display:inline-block;vertical-align:middle;width:70px;height:7px;background:var(--line);border-radius:99px;margin-right:8px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--accent)}
+  .avg{font-weight:800}
+  details{margin-top:14px}
+  summary{cursor:pointer;font-weight:700;font-size:15px}
+  .empty{color:var(--slate);text-align:center;padding:30px 0}
+  .err{color:var(--warn);font-weight:700}
+  @media (max-width:600px){
+    h1{font-size:22px}.card{padding:18px 16px}.p-avg{text-align:left}
+    .search button{padding:12px 16px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🕒 월 평균 근무시간 계산기 <span id="monthLabel" style="font-size:18px;color:var(--slate)"></span></h1>
+
+  <div class="toolbar">
+    <label class="btn" for="csvFile">CSV 불러오기</label>
+    <input type="file" id="csvFile" accept=".csv,text/csv" hidden>
+    <label class="opt"><input type="checkbox" id="optMid" checked> 중도입퇴사 의심자(주차 누락) 제외</label>
+  </div>
+  <div class="fileinfo" id="fileInfo">주차별 근태실적 CSV 파일을 불러오세요. (파일은 브라우저 안에서만 처리되며 외부로 전송되지 않습니다)</div>
+
+  <!-- 인원 검색 -->
+  <div class="card">
+    <h2>인원 검색</h2>
+    <div class="search">
+      <input id="q" type="text" placeholder="이름을 입력하세요" autocomplete="off">
+      <button class="btn" id="btnSearch">검색</button>
+      <button class="btn ghost" id="btnReset">초기화</button>
+    </div>
+    <div class="hint">동명이인은 사번·부서·직급과 함께 각각 표시됩니다. 제외 대상자도 검색되며 제외 사유가 표시됩니다.</div>
+    <div id="searchResult"></div>
+  </div>
+
+  <!-- 조직별 -->
+  <div class="card">
+    <h2>조직별 월 평균 근무시간</h2>
+    <div class="scroll" id="orgTable"><div class="empty">CSV를 불러오면 표시됩니다.</div></div>
+    <div class="hint">행을 누르면 부서별 상세가 펼쳐집니다. 조직 평균 = 개인별 월 평균의 평균(단위: 시간).</div>
+  </div>
+
+  <!-- 제외자 -->
+  <div class="card" id="excludedCard" style="display:none">
+    <h2>계산 제외 인원</h2>
+    <div id="excludedSummary" class="hint" style="margin:0 0 6px"></div>
+    <details><summary>제외 인원 목록 보기</summary>
+      <div class="scroll" id="excludedTable"></div>
+    </details>
+  </div>
+</div>
+
+<script>
+// ==LOGIC-START==
+const CAP_MIN = 3120;                       // 주 52시간 상한(분)
+const EXCLUDE_GUBUN = '근태예외자';
+const EXCLUDE_RANKS = ['부사장','비상근고문','상무','전무','회장','사외이사','사장','예술인'];
+
+// 조직(사업부) 매핑 — 조직개편 시 아래 목록만 수정하면 됩니다. (로데이터 '부서명' 기준)
+const ORG_MAP = {
+  'DE사업부': ['DE사업부','DE사업전략담당','글로벌마케팅팀','DE사업전략팀','DE사업운영팀','DE사업인사팀','C5ISR사업센터','C5ISR사업단','통신연구소','지휘통제1팀','지휘통제2팀','통신1팀','통신2팀','통신3팀','통신4팀','무인체계연구소','지상시스템1팀','지상시스템2팀','지상시스템3팀','지상시스템4팀','SW팀(지상)','항공시스템개발팀','SW팀(항공)','레이다사업센터','레이다사업단','레이다연구소','지상레이다체계1팀','지상레이다체계2팀','해상레이다체계팀','항공레이다체계팀','HW팀(레이다)','첨단레이다팀','SW팀(레이다)','레이저사업센터','레이저사업단','레이저연구소','레이저1팀','레이저2팀','레이저3팀','전자광학체계1팀','전자광학체계2팀','전자광학체계3팀','전자광학체계4팀','단거리레이다TF팀','사우디MNG TF'],
+  '우주사업부': ['우주사업총괄','우주사업부','우주사업전략팀','우주사업단','솔루션사업팀','차세대위성체계팀','우주연구소','위성체계팀','위성본체팀','위성탑재체1팀','위성탑재체2팀','위성탑재체3팀','위성지상체팀','위성기계팀','제주우주센터','대관지원팀','우주생산팀'],
+  '해양사업부': ['해양사업부','해양사업전략팀','해양사업단','소나개발팀','해양연구소','해양시스템1팀','해양시스템2팀','해양시스템3팀','해양시스템4팀','해양시스템5팀','해양SW1팀','해양SW2팀','Smart Vessel사업센터','Smart Vessel사업팀','Smart Battleship설계팀','플랫폼체계팀','무인체계팀'],
+  'MRO사업부': ['MRO사업부','MRO사업개발TF팀','MRO사업전략팀','MRO사업운영팀','MRO사업단','시스템MRO팀','방공MRO1팀','방공MRO2팀','해양MRO팀','IPS1팀','IPS2팀','시험기술팀','고객지원팀'],
+  '기반연구소': ['기반연구소','연구기획팀','AI팀','차세대반도체팀','차세대단말기팀','MUM-T팀','사이버시큐리티팀','HW1팀','HW2팀','HW3팀'],
+  '구미사업장': ['구미사업장','체계기술1팀','체계기술2팀','체계시험1팀','체계시험2팀','체계시험3팀','체계시험4팀','기계기술팀','제조팀','운영팀(구미)','생산관리팀','생산기술팀','자재관리팀','안전환경팀(구미)'],
+  '대공사업단': ['대공사업단','대공사업전략팀','대공사업팀','대공솔루션팀'],
+  '기타': ['사장실','고문실','임원실','C-UAS']
+};
+const SUPPORT_ORG = '지원조직';              // 위 목록에 없는 모든 부서 (명칭 변경 시 이 줄만 수정)
+const ORG_ORDER = ['DE사업부','우주사업부','해양사업부','구미사업장','MRO사업부','기반연구소','대공사업단','기타',SUPPORT_ORG];
+const REPORT_ORGS = ['DE사업부','우주사업부','해양사업부','구미사업장','MRO사업부'];   // 보고서 대상 표시용
+
+const norm = s => String(s == null ? '' : s).replace(/\s+/g, '');
+const DEPT2ORG = new Map();
+for (const [org, depts] of Object.entries(ORG_MAP)) for (const d of depts) DEPT2ORG.set(norm(d), org);
+const orgOf = dept => DEPT2ORG.get(norm(dept)) || SUPPORT_ORG;
+
+function decodeBuffer(buf) {
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+  catch (e) { return new TextDecoder('euc-kr').decode(buf); }   // 엑셀 CSV(CP949)
+}
+
+function parseCSV(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(cur); cur = '';
+      if (row.some(v => v !== '')) rows.push(row);
+      row = [];
+    } else cur += c;
+  }
+  row.push(cur);
+  if (row.some(v => v !== '')) rows.push(row);
+  return rows;
+}
+
+function toNum(v) {
+  const n = parseFloat(String(v == null ? '' : v).replace(/[,\s]/g, ''));
+  return isNaN(n) ? 0 : n;
+}
+
+// 헤더명으로 열을 찾고, 못 찾으면 A열부터의 고정 순서로 대체
+function findCols(table) {
+  const def = { gubun: 1, ym: 2, week: 3, id: 4, name: 5, rank: 6, site: 7, dept: 8, total: 16 };
+  let hi = table.findIndex((r, i) => i < 5 && r.map(norm).includes('이름'));
+  if (hi < 0) hi = 0;
+  const h = table[hi].map(norm), cols = { ...def }, warn = [];
+  const set = (k, i) => { if (i >= 0) cols[k] = i; else warn.push(k); };
+  set('gubun', h.findIndex(x => x.includes('구분')));
+  set('ym',    h.findIndex(x => x === '년월'));
+  set('week',  h.findIndex(x => x === '주차'));
+  set('id',    h.findIndex(x => x === '사번'));
+  set('name',  h.findIndex(x => x === '이름'));
+  set('rank',  h.findIndex(x => x === '직급'));
+  set('dept',  h.findIndex(x => x === '부서명'));
+  set('total', h.findIndex(x => x === '주확정근무시간'));
+  return { cols, headerRow: hi, warn };
+}
+
+function compute(table, opts) {
+  opts = opts || {};
+  const excludeMid = opts.excludeMid !== false;
+  const { cols, headerRow, warn } = findCols(table);
+  const data = table.slice(headerRow + 1);
+  const persons = new Map();
+  const ymCount = {};
+  let totalRows = 0;
+
+  for (const r of data) {
+    const name = (r[cols.name] || '').trim();
+    if (!name) continue;
+    totalRows++;
+    const id = (r[cols.id] || '').trim();
+    const dept = (r[cols.dept] || '').trim();
+    const key = id || (name + '|' + dept);
+    const wk = parseInt((String(r[cols.week]).match(/\d+/) || [0])[0], 10);
+    const ym = (r[cols.ym] || '').trim();
+    if (ym) ymCount[ym] = (ymCount[ym] || 0) + 1;
+    let p = persons.get(key);
+    if (!p) { p = { key, id, name, rank: '', gubun: new Set(), depts: new Map(), weeks: {}, rows: 0 }; persons.set(key, p); }
+    p.rows++;
+    p.rank = (r[cols.rank] || '').trim() || p.rank;
+    p.gubun.add((r[cols.gubun] || '').trim());
+    p.depts.set(wk, dept);
+    const raw = toNum(r[cols.total]);
+    p.weeks[wk] = { raw, capped: Math.min(raw, CAP_MIN) };
+  }
+
+  let maxWeek = 0;
+  for (const p of persons.values()) for (const w of Object.keys(p.weeks)) maxWeek = Math.max(maxWeek, +w);
+
+  const list = [];
+  for (const p of persons.values()) {
+    const wkNums = Object.keys(p.weeks).map(Number).sort((a, b) => a - b);
+    const lastWk = wkNums[wkNums.length - 1];
+    p.dept = p.depts.get(lastWk) || '';
+    p.deptChanged = new Set(p.depts.values()).size > 1 ? [...new Set(wkNums.map(w => p.depts.get(w)))] : null;
+    p.org = orgOf(p.dept);
+    p.weekNums = wkNums;
+    p.missing = [];
+    for (let w = 1; w <= maxWeek; w++) if (!p.weeks[w]) p.missing.push(w);
+
+    let reason = null;
+    if (p.gubun.has(EXCLUDE_GUBUN)) reason = '근태예외자';
+    else if (EXCLUDE_RANKS.includes(p.rank)) reason = (p.rank === '예술인' ? '예술인' : '임원·비상근 직급(' + p.rank + ')');
+    else if (excludeMid && p.missing.length) reason = '중도입퇴사 의심(' + p.missing.join('·') + '주차 데이터 없음)';
+    p.excluded = reason;
+
+    const n = wkNums.length;
+    p.avgMin = n ? wkNums.reduce((s, w) => s + p.weeks[w].capped, 0) / n : 0;
+    p.avgH = p.avgMin / 60;
+    list.push(p);
+  }
+
+  // 조직별 집계
+  const mk = () => ({ n: 0, sum: 0, wSum: Array(maxWeek + 1).fill(0), wCnt: Array(maxWeek + 1).fill(0), depts: new Map() });
+  const stats = new Map(ORG_ORDER.map(o => [o, mk()])); const total = mk();
+  let validRows = 0;
+  for (const p of list) {
+    if (p.excluded) continue;
+    validRows += p.rows;
+    for (const t of [stats.get(p.org), total]) {
+      t.n++; t.sum += p.avgMin;
+      for (const w of p.weekNums) { t.wSum[w] += p.weeks[w].capped; t.wCnt[w]++; }
+    }
+    const o = stats.get(p.org);
+    const d = o.depts.get(p.dept) || { n: 0, sum: 0 };
+    d.n++; d.sum += p.avgMin; o.depts.set(p.dept, d);
+  }
+  const ym = Object.entries(ymCount).sort((a, b) => b[1] - a[1])[0];
+  return { list, stats, total, maxWeek, totalRows, validRows, ym: ym ? ym[0] : '', warn };
+}
+
+const r1 = h => (Math.round((h + 1e-9) * 10) / 10).toFixed(1);
+// ==LOGIC-END==
+
+// ---------- 화면 ----------
+let STATE = null, TABLE = null, FILENAME = '';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const fmt = n => Math.round(n).toLocaleString('ko-KR');
+
+function ymLabel(ym) {
+  const m = String(ym).match(/(\d{4})\D?(\d{1,2})/);
+  return m ? m[1] + '년 ' + parseInt(m[2], 10) + '월' : ym;
+}
+
+function run() {
+  if (!TABLE) return;
+  STATE = compute(TABLE, { excludeMid: $('optMid').checked });
+  const s = STATE;
+  $('monthLabel').textContent = s.ym ? '· ' + ymLabel(s.ym) : '';
+  $('fileInfo').innerHTML = '불러온 파일: ' + esc(FILENAME) + ' (유효 ' + fmt(s.validRows) + '건 / 전체 ' + fmt(s.totalRows) + '건) · 주차 ' + s.maxWeek + '주'
+    + (s.warn.length ? '<br><span class="err">⚠ 헤더에서 찾지 못한 열: ' + s.warn.join(', ') + ' (열 순서로 대체)</span>' : '');
+  renderOrg(); renderExcluded(); doSearch();
+}
+
+function renderOrg() {
+  const s = STATE, W = s.maxWeek;
+  let h = '<table><thead><tr><th>조직</th><th>인원(명)</th><th>월 평균(시간)</th>';
+  for (let w = 1; w <= W; w++) h += '<th>' + w + '주차</th>';
+  h += '</tr></thead><tbody>';
+  const row = (label, t, cls, org) => {
+    const avg = t.n ? t.sum / t.n / 60 : null;
+    let r = '<tr class="' + cls + '" ' + (org ? 'data-org="' + esc(org) + '"' : '') + '><td>' + esc(label)
+      + (REPORT_ORGS.includes(label) ? '<span class="chip">보고</span>' : '') + '</td><td>' + t.n + '</td>';
+    r += avg == null ? '<td>-</td>' : '<td><span class="bar"><i style="width:' + Math.min(100, avg / 52 * 100) + '%"></i></span><span class="avg">' + r1(avg) + '</span></td>';
+    for (let w = 1; w <= W; w++) r += '<td>' + (t.wCnt[w] ? r1(t.wSum[w] / t.wCnt[w] / 60) : '-') + '</td>';
+    return r + '</tr>';
+  };
+  for (const org of ORG_ORDER) {
+    const t = s.stats.get(org);
+    if (!t.n) continue;
+    h += row(org, t, 'org', org);
+    const ds = [...t.depts.entries()].sort((a, b) => b[1].n - a[1].n);
+    for (const [d, v] of ds)
+      h += '<tr class="dept" data-parent="' + esc(org) + '"><td>' + esc(d) + '</td><td>' + v.n + '</td><td>' + r1(v.sum / v.n / 60) + '</td>' + '<td colspan="' + W + '"></td></tr>';
+  }
+  h += row('전사 (제외 대상 빼고)', s.total, 'total', '');
+  $('orgTable').innerHTML = h + '</tbody></table>';
+}
+
+function renderExcluded() {
+  const ex = STATE.list.filter(p => p.excluded);
+  $('excludedCard').style.display = ex.length ? '' : 'none';
+  const cnt = {};
+  ex.forEach(p => { const k = p.excluded.replace(/\(.*\)/, ''); cnt[k] = (cnt[k] || 0) + 1; });
+  $('excludedSummary').textContent = '총 ' + ex.length + '명 제외 — ' + Object.entries(cnt).map(([k, v]) => k + ' ' + v + '명').join(', ');
+  let h = '<table><thead><tr><th>이름</th><th>사번</th><th>부서</th><th>직급</th><th>제외 사유</th></tr></thead><tbody>';
+  ex.forEach(p => { h += '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.id) + '</td><td>' + esc(p.dept) + '</td><td>' + esc(p.rank) + '</td><td>' + esc(p.excluded) + '</td></tr>'; });
+  $('excludedTable').innerHTML = h + '</tbody></table>';
+}
+
+function doSearch() {
+  const box = $('searchResult'), q = $('q').value.trim();
+  if (!STATE) { box.innerHTML = q ? '<div class="empty">먼저 CSV를 불러오세요.</div>' : ''; return; }
+  if (!q) { box.innerHTML = ''; return; }
+  const hits = STATE.list.filter(p => p.name.includes(q))
+    .sort((a, b) => (b.name === q) - (a.name === q) || a.name.localeCompare(b.name, 'ko'));
+  if (!hits.length) { box.innerHTML = '<div class="empty">검색 결과가 없습니다.</div>'; return; }
+  const same = {}; hits.forEach(p => same[p.name] = (same[p.name] || 0) + 1);
+  box.innerHTML = hits.slice(0, 30).map(p => personCard(p, same[p.name] > 1)).join('')
+    + (hits.length > 30 ? '<div class="hint">상위 30명만 표시됩니다. 이름을 더 구체적으로 입력해 주세요.</div>' : '');
+}
+
+function personCard(p, dup) {
+  let h = '<div class="person' + (p.excluded ? ' excluded' : '') + '"><div class="p-head"><div>'
+    + '<div class="p-name">' + esc(p.name) + (dup ? '<span class="tag warn">동명이인</span>' : '') + '</div>'
+    + '<div class="p-meta">사번 ' + esc(p.id || '-') + ' · ' + esc(p.rank || '-') + '<br>' + esc(p.org) + ' · ' + esc(p.dept || '-')
+    + (p.deptChanged ? '<br>부서 이동: ' + p.deptChanged.map(esc).join(' → ') + ' (마지막 주차 부서 기준)' : '') + '</div></div>'
+    + '<div class="p-avg"><b>' + r1(p.avgH) + '시간</b><span>' + (p.excluded ? '참고용 (계산 제외)' : '월 평균 근무시간') + '</span></div></div>';
+  if (p.excluded) h += '<div class="banner">⚠ 조직 평균 계산에서 제외됨 — ' + esc(p.excluded) + '</div>';
+  h += '<div class="scroll"><table><thead><tr><th>주차</th><th>주확정근무시간(분)</th><th>적용(분)</th><th>시간</th></tr></thead><tbody>';
+  for (let w = 1; w <= STATE.maxWeek; w++) {
+    const x = p.weeks[w];
+    if (!x) { h += '<tr><td>' + w + '주차</td><td colspan="3" style="color:var(--warn)">데이터 없음</td></tr>'; continue; }
+    h += '<tr><td>' + w + '주차' + (x.raw > CAP_MIN ? '<span class="tag cap">52시간 상한 적용</span>' : '') + '</td><td>' + fmt(x.raw) + '</td><td>' + fmt(x.capped) + '</td><td>' + r1(x.capped / 60) + '</td></tr>';
+  }
+  h += '<tr class="total"><td>월 평균</td><td></td><td>' + fmt(p.avgMin) + '</td><td>' + r1(p.avgH) + '</td></tr></tbody></table></div></div>';
+  return h;
+}
+
+$('csvFile').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try { TABLE = parseCSV(decodeBuffer(rd.result)); FILENAME = f.name; run(); }
+    catch (err) { $('fileInfo').innerHTML = '<span class="err">파일을 읽지 못했습니다: ' + esc(err.message) + '</span>'; }
+  };
+  rd.readAsArrayBuffer(f);
+  e.target.value = '';
+});
+$('optMid').addEventListener('change', run);
+$('btnSearch').addEventListener('click', doSearch);
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+$('btnReset').addEventListener('click', () => { $('q').value = ''; doSearch(); });
+$('orgTable').addEventListener('click', e => {
+  const tr = e.target.closest('tr.org'); if (!tr) return;
+  const org = tr.dataset.org;
+  document.querySelectorAll('tr.dept').forEach(d => { if (d.dataset.parent === org) d.classList.toggle('open'); });
+});
+</script>
+</body>
+</html>
 
