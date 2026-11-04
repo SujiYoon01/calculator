@@ -110,6 +110,7 @@
 <script>
 // ==LOGIC-START==
 const CAP_MIN = 3120;                       // 주 52시간 상한(분)
+const FLOOR_MIN = 2400;                     // 주 40시간 하한(분)
 const EXCLUDE_GUBUN = '근태예외자';
 const EXCLUDE_RANKS = ['부사장','비상근고문','상무','전무','회장','사외이사','사장','예술인'];
 const EXCLUDE_DEPTS = ['제조팀'];           // 계산 제외 부서
@@ -210,7 +211,7 @@ function compute(table, opts) {
     p.gubun.add((r[cols.gubun] || '').trim());
     p.depts.set(wk, dept);
     const raw = toNum(r[cols.total]);
-    p.weeks[wk] = { raw, capped: Math.min(raw, CAP_MIN) };
+    p.weeks[wk] = { raw, capped: Math.min(Math.max(raw, FLOOR_MIN), CAP_MIN) };
   }
 
   let maxWeek = 0;
@@ -231,6 +232,7 @@ function compute(table, opts) {
     if (p.gubun.has(EXCLUDE_GUBUN)) reason = '근태예외자';
     else if (EXCLUDE_RANKS.includes(p.rank)) reason = (p.rank === '예술인' ? '예술인' : '임원·비상근 직급(' + p.rank + ')');
     else if (EXCLUDE_DEPTS.includes((p.dept || '').replace(/\s+/g, ''))) reason = '제외 부서(' + p.dept + ')';
+    else if (wkNums.length && wkNums.every(w => p.weeks[w].raw === 0)) reason = '한 달 전체 0분(휴직 등 추정)';
     else if (excludeMid && p.missing.length) reason = '중도입퇴사 의심(' + p.missing.join('·') + '주차 데이터 없음)';
     p.excluded = reason;
 
@@ -370,4 +372,3 @@ $('orgTable').addEventListener('click', e => {
 </script>
 </body>
 </html>
-
