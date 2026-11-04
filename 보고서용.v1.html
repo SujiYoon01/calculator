@@ -1,1 +1,481 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>보고서용 근무시간 계산기</title>
+<style>
+  :root{
+    --navy:#23305a; --slate:#6f7f9c; --bg:#eef1f7; --card:#fff; --line:#e3e8f2;
+    --accent:#3b5bdb; --warn:#c2410c; --warn-bg:#fff4ec;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--navy);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;}
+  .wrap{max-width:1100px;margin:0 auto;padding:28px 18px 60px}
+  h1{font-size:28px;margin:0 0 18px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  .btn{display:inline-block;border:0;border-radius:999px;padding:14px 26px;font-size:16px;font-weight:700;
+    cursor:pointer;color:#fff;background:var(--navy)}
+  .btn.ghost{background:var(--slate)}
+  .opt{font-size:14px;color:var(--slate);display:flex;align-items:center;gap:6px}
+  .fileinfo{margin:12px 2px 0;font-size:14px;color:var(--slate);line-height:1.5}
+  .card{background:var(--card);border-radius:24px;padding:22px 24px;margin-top:18px;
+    box-shadow:0 6px 24px rgba(35,48,90,.06)}
+  .card h2{font-size:19px;margin:0 0 14px}
+  .search{display:flex;gap:10px}
+  .search input{flex:1;min-width:0;border:2px solid var(--line);border-radius:999px;padding:14px 20px;font-size:16px;
+    color:var(--navy);outline:none}
+  .search input:focus{border-color:var(--accent)}
+  .search button{white-space:nowrap}
+  .hint{font-size:13px;color:var(--slate);margin-top:10px}
+  .person{border:1px solid var(--line);border-radius:18px;padding:16px 18px;margin-top:14px}
+  .person.excluded{background:var(--warn-bg);border-color:#f6d3bd}
+  .p-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:flex-start}
+  .p-name{font-size:20px;font-weight:800}
+  .p-meta{font-size:13px;color:var(--slate);margin-top:4px;line-height:1.6}
+  .p-avg{text-align:right}
+  .p-avg b{font-size:30px}
+  .p-avg span{font-size:13px;color:var(--slate);display:block}
+  .tag{display:inline-block;font-size:12px;padding:2px 9px;border-radius:999px;background:var(--bg);color:var(--slate);margin-left:6px;font-weight:600}
+  .tag.warn{background:#ffe3d1;color:var(--warn)}
+  .tag.cap{background:#e7ecff;color:var(--accent)}
+  .banner{margin-top:10px;font-size:14px;color:var(--warn);font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}
+  th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  th{font-size:12px;color:var(--slate);font-weight:700}
+  .scroll{overflow-x:auto}
+  tr.org{cursor:pointer}
+  tr.org:hover{background:#f6f8fc}
+  tr.org td:first-child{font-weight:700}
+  tr.total td{font-weight:800;background:#f6f8fc}
+  tr.dept{display:none;background:#fafbfe}
+  tr.dept.open{display:table-row}
+  tr.dept td:first-child{padding-left:28px;color:var(--slate)}
+  .chip{font-size:11px;background:var(--navy);color:#fff;border-radius:999px;padding:2px 8px;margin-left:6px;font-weight:600}
+  .bar{display:inline-block;vertical-align:middle;width:70px;height:7px;background:var(--line);border-radius:99px;margin-right:8px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--accent)}
+  .avg{font-weight:800}
+  details{margin-top:14px}
+  summary{cursor:pointer;font-weight:700;font-size:15px}
+  .empty{color:var(--slate);text-align:center;padding:30px 0}
+  .err{color:var(--warn);font-weight:700}
+  @media (max-width:600px){
+    h1{font-size:22px}.card{padding:18px 16px}.p-avg{text-align:left}
+    .search button{padding:12px 16px}
+  }
 
+.btn.sm{padding:8px 16px;font-size:13px}.sum{font-size:15px;line-height:1.8}
+tr.total td{font-weight:800}
+td .s,th .s{font-size:11px;font-weight:400;color:var(--slate)}
+tr.hl td{background:#eef1f7;font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📑 보고서용 근무시간 계산기</h1>
+  <div class="toolbar">
+    <label class="btn" for="csvFiles">CSV 불러오기 (여러 달 선택 가능)</label>
+    <input type="file" id="csvFiles" accept=".csv,text/csv" multiple hidden>
+    <button class="btn ghost" id="btnClear">초기화</button>
+    <label class="opt"><input type="checkbox" id="optMid" checked> 중도입퇴사 의심자(주차 누락) 제외</label>
+  </div>
+  <div class="fileinfo" id="fileInfo"></div>
+  <div id="out"></div>
+</div>
+<script>
+// 계산 규칙은 index.html(월 평균 근무시간 계산기)과 동일합니다.
+// ==LOGIC-START==
+
+const CAP_MIN = 3120;                       // 주 52시간 상한(분)
+const FLOOR_MIN = 2400;                     // 주 40시간 하한(분)
+const EXCLUDE_GUBUN = '근태예외자';
+const EXCLUDE_RANKS = ['부사장','비상근고문','상무','전무','회장','사외이사','사장','예술인'];
+const EXCLUDE_DEPTS = ['제조팀'];           // 계산 제외 부서
+
+// 조직(사업부) 매핑 — 조직개편 시 아래 목록만 수정하면 됩니다. (로데이터 '부서명' 기준)
+const ORG_MAP = {
+  'DE사업부': ['DE사업부','DE사업전략담당','글로벌마케팅팀','DE사업전략팀','DE사업운영팀','DE사업인사팀','C5ISR사업센터','C5ISR사업단','통신연구소','지휘통제1팀','지휘통제2팀','통신1팀','통신2팀','통신3팀','통신4팀','무인체계연구소','지상시스템1팀','지상시스템2팀','지상시스템3팀','지상시스템4팀','SW팀(지상)','항공시스템개발팀','SW팀(항공)','레이다사업센터','레이다사업단','레이다연구소','지상레이다체계1팀','지상레이다체계2팀','해상레이다체계팀','항공레이다체계팀','HW팀(레이다)','첨단레이다팀','SW팀(레이다)','레이저사업센터','레이저사업단','레이저연구소','레이저1팀','레이저2팀','레이저3팀','전자광학체계1팀','전자광학체계2팀','전자광학체계3팀','전자광학체계4팀','단거리레이다TF팀','사우디MNG TF'],
+  '우주사업부': ['우주사업총괄','우주사업부','우주사업전략팀','우주사업단','솔루션사업팀','차세대위성체계팀','우주연구소','위성체계팀','위성본체팀','위성탑재체1팀','위성탑재체2팀','위성탑재체3팀','위성지상체팀','위성기계팀','제주우주센터','대관지원팀','우주생산팀'],
+  '해양사업부': ['해양사업부','해양사업전략팀','해양사업단','소나개발팀','해양연구소','해양시스템1팀','해양시스템2팀','해양시스템3팀','해양시스템4팀','해양시스템5팀','해양SW1팀','해양SW2팀','Smart Vessel사업센터','Smart Vessel사업팀','Smart Battleship설계팀','플랫폼체계팀','무인체계팀'],
+  'MRO사업부': ['MRO사업부','MRO사업개발TF팀','MRO사업전략팀','MRO사업운영팀','MRO사업단','시스템MRO팀','방공MRO1팀','방공MRO2팀','해양MRO팀','IPS1팀','IPS2팀','시험기술팀','고객지원팀'],
+  '기반연구소': ['기반연구소','연구기획팀','AI팀','차세대반도체팀','차세대단말기팀','MUM-T팀','사이버시큐리티팀','HW1팀','HW2팀','HW3팀'],
+  '구미사업장': ['구미사업장','체계기술1팀','체계기술2팀','체계시험1팀','체계시험2팀','체계시험3팀','체계시험4팀','기계기술팀','제조팀','운영팀(구미)','생산관리팀','생산기술팀','자재관리팀','안전환경팀(구미)'],
+  '대공사업단': ['대공사업단','대공사업전략팀','대공사업팀','대공솔루션팀'],
+  '기타': ['사장실','고문실','임원실','C-UAS']
+};
+const SUPPORT_ORG = '지원조직';              // 위 목록에 없는 모든 부서 (명칭 변경 시 이 줄만 수정)
+const ORG_ORDER = ['DE사업부','우주사업부','해양사업부','구미사업장','MRO사업부','기반연구소','대공사업단','기타',SUPPORT_ORG];
+const REPORT_ORGS = ['DE사업부','우주사업부','해양사업부','구미사업장','MRO사업부'];   // 보고서 대상 표시용
+
+const norm = s => String(s == null ? '' : s).replace(/\s+/g, '');
+const DEPT2ORG = new Map();
+for (const [org, depts] of Object.entries(ORG_MAP)) for (const d of depts) DEPT2ORG.set(norm(d), org);
+const orgOf = dept => DEPT2ORG.get(norm(dept)) || SUPPORT_ORG;
+
+function decodeBuffer(buf) {
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+  catch (e) { return new TextDecoder('euc-kr').decode(buf); }   // 엑셀 CSV(CP949)
+}
+
+function parseCSV(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(cur); cur = '';
+      if (row.some(v => v !== '')) rows.push(row);
+      row = [];
+    } else cur += c;
+  }
+  row.push(cur);
+  if (row.some(v => v !== '')) rows.push(row);
+  return rows;
+}
+
+function toNum(v) {
+  const n = parseFloat(String(v == null ? '' : v).replace(/[,\s]/g, ''));
+  return isNaN(n) ? 0 : n;
+}
+
+// 헤더명으로 열을 찾고, 못 찾으면 A열부터의 고정 순서로 대체
+function findCols(table) {
+  const def = { gubun: 1, ym: 2, week: 3, id: 4, name: 5, rank: 6, site: 7, dept: 8, total: 16 };
+  let hi = table.findIndex((r, i) => i < 5 && r.map(norm).includes('이름'));
+  if (hi < 0) hi = 0;
+  const h = table[hi].map(norm), cols = { ...def }, warn = [];
+  const set = (k, i) => { if (i >= 0) cols[k] = i; else warn.push(k); };
+  set('gubun', h.findIndex(x => x.includes('구분')));
+  set('ym',    h.findIndex(x => x === '년월'));
+  set('week',  h.findIndex(x => x === '주차'));
+  set('id',    h.findIndex(x => x === '사번'));
+  set('name',  h.findIndex(x => x === '이름'));
+  set('rank',  h.findIndex(x => x === '직급'));
+  set('dept',  h.findIndex(x => x === '부서명'));
+  set('total', h.findIndex(x => x === '주확정근무시간'));
+  return { cols, headerRow: hi, warn };
+}
+
+function compute(table, opts) {
+  opts = opts || {};
+  const excludeMid = opts.excludeMid !== false;
+  const { cols, headerRow, warn } = findCols(table);
+  const data = table.slice(headerRow + 1);
+  const persons = new Map();
+  const ymCount = {};
+  let totalRows = 0;
+
+  for (const r of data) {
+    const name = (r[cols.name] || '').trim();
+    if (!name) continue;
+    totalRows++;
+    const id = (r[cols.id] || '').trim();
+    const dept = (r[cols.dept] || '').trim();
+    const key = id || (name + '|' + dept);
+    const wk = parseInt((String(r[cols.week]).match(/\d+/) || [0])[0], 10);
+    const ym = (r[cols.ym] || '').trim();
+    if (ym) ymCount[ym] = (ymCount[ym] || 0) + 1;
+    let p = persons.get(key);
+    if (!p) { p = { key, id, name, rank: '', gubun: new Set(), depts: new Map(), weeks: {}, rows: 0 }; persons.set(key, p); }
+    p.rows++;
+    p.rank = (r[cols.rank] || '').trim() || p.rank;
+    p.gubun.add((r[cols.gubun] || '').trim());
+    p.depts.set(wk, dept);
+    const raw = toNum(r[cols.total]);
+    p.weeks[wk] = { raw, capped: Math.min(Math.max(raw, FLOOR_MIN), CAP_MIN) };
+  }
+
+  let maxWeek = 0;
+  for (const p of persons.values()) for (const w of Object.keys(p.weeks)) maxWeek = Math.max(maxWeek, +w);
+
+  const list = [];
+  for (const p of persons.values()) {
+    const wkNums = Object.keys(p.weeks).map(Number).sort((a, b) => a - b);
+    const lastWk = wkNums[wkNums.length - 1];
+    p.dept = p.depts.get(lastWk) || '';
+    p.deptChanged = new Set(p.depts.values()).size > 1 ? [...new Set(wkNums.map(w => p.depts.get(w)))] : null;
+    p.org = orgOf(p.dept);
+    p.weekNums = wkNums;
+    p.missing = [];
+    for (let w = 1; w <= maxWeek; w++) if (!p.weeks[w]) p.missing.push(w);
+
+    let reason = null;
+    if (p.gubun.has(EXCLUDE_GUBUN)) reason = '근태예외자';
+    else if (EXCLUDE_RANKS.includes(p.rank)) reason = (p.rank === '예술인' ? '예술인' : '임원·비상근 직급(' + p.rank + ')');
+    else if (EXCLUDE_DEPTS.includes((p.dept || '').replace(/\s+/g, ''))) reason = '제외 부서(' + p.dept + ')';
+    else if (wkNums.length && wkNums.every(w => p.weeks[w].raw === 0)) reason = '한 달 전체 0분(휴직 등 추정)';
+    else if (excludeMid && p.missing.length) reason = '중도입퇴사 의심(' + p.missing.join('·') + '주차 데이터 없음)';
+    p.excluded = reason;
+
+    const n = wkNums.length;
+    p.avgMin = n ? wkNums.reduce((s, w) => s + p.weeks[w].capped, 0) / n : 0;
+    p.avgH = p.avgMin / 60;
+    list.push(p);
+  }
+
+  // 조직별 집계
+  const mk = () => ({ n: 0, sum: 0, wSum: Array(maxWeek + 1).fill(0), wCnt: Array(maxWeek + 1).fill(0), depts: new Map() });
+  const stats = new Map(ORG_ORDER.map(o => [o, mk()])); const total = mk();
+  let validRows = 0;
+  for (const p of list) {
+    if (p.excluded) continue;
+    validRows += p.rows;
+    for (const t of [stats.get(p.org), total]) {
+      t.n++; t.sum += p.avgMin;
+      for (const w of p.weekNums) { t.wSum[w] += p.weeks[w].capped; t.wCnt[w]++; }
+    }
+    const o = stats.get(p.org);
+    const d = o.depts.get(p.dept) || { n: 0, sum: 0 };
+    d.n++; d.sum += p.avgMin; o.depts.set(p.dept, d);
+  }
+  const ym = Object.entries(ymCount).sort((a, b) => b[1] - a[1])[0];
+  return { list, stats, total, maxWeek, totalRows, validRows, ym: ym ? ym[0] : '', warn };
+}
+
+const r1 = h => (Math.round((h + 1e-9) * 10) / 10).toFixed(1);
+
+// ==LOGIC-END==
+// ==REPORT-START==
+// ===== 보고서용 계산 (월별 결과 여러 개 → 사업부 표 / 52시간 비율 / 표준편차·사분면 / 부서별 / 위험군) =====
+const ORG5 = ['DE사업부','해양사업부','우주사업부','구미사업장','MRO사업부'];
+const ROWS = [...ORG5, '전사'];
+const REPORT_ORG = '우주사업부';
+// 상반기(1~6월) 확정값 — 기존 보고서(상반기 분석 결과) 수치. 수정이 필요하면 여기만 고치세요.
+const H1_AVG = {
+  'DE사업부':[47.9,46.8,48.7,48.9,49.6,49.4], '해양사업부':[48.2,47.4,49.3,49.5,48.8,49.1],
+  '우주사업부':[47.7,47.5,48.9,47.4,47.2,48.4], '구미사업장':[47.1,45.1,48.1,47.9,47.4,47.6],
+  'MRO사업부':[46.0,44.3,46.4,46.6,45.7,46.2], '전사':[47.3,46.0,48.0,47.9,47.9,48.1] };
+const H1_AVG_REPORTED = { 'DE사업부':48.5,'해양사업부':48.7,'우주사업부':47.9,'구미사업장':47.2,'MRO사업부':45.9,'전사':47.5 };
+const H1_RATIO = {   // 주 52시간 근무자 비율(%)
+  'DE사업부':[22.9,14.9,25.8,28.0,30.6,29.2], '해양사업부':[21.2,13.3,28.9,30.1,22.9,27.5],
+  '우주사업부':[20.4,17.6,28.0,18.2,15.9,24.1], '구미사업장':[15.8,4.3,16.9,16.7,13.7,16.7],
+  'MRO사업부':[11.8,2.3,9.4,11.3,6.6,9.7] };
+// 우주사업부 부서별 현황(보고서 4장)에 쓰는 12개 부서
+const SPACE_DEPTS = ['우주사업전략팀','우주사업단','솔루션사업팀','차세대위성체계팀','위성체계팀','위성본체팀','위성탑재체1팀','위성탑재체2팀','위성탑재체3팀','위성지상체팀','위성기계팀','제주우주센터'];
+const RISK_GROUPS = [
+  { name:'그룹1', desc:'44시간 미만',          test: h => h < 44 },
+  { name:'그룹2', desc:'44시간 이상 48시간 미만', test: h => h >= 44 && h < 48 },
+  { name:'그룹3', desc:'48시간 이상 52시간 미만', test: h => h >= 48 && h < 52 },
+  { name:'그룹4', desc:'52시간',               test: h => h >= 52 - 1e-9 } ];
+
+const mean = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : null;
+const popStd = a => { if (!a.length) return null; const m = mean(a); return Math.sqrt(mean(a.map(x => (x - m) ** 2))); };
+const rankMap = vals => {            // 표시값(소수 첫째 자리) 기준 순위, 동률 동순위
+  const r = {}; for (const k of Object.keys(vals)) {
+    if (vals[k] == null) { r[k] = null; continue; }
+    const v = Math.round(vals[k] * 10);
+    r[k] = 1 + Object.keys(vals).filter(o => vals[o] != null && Math.round(vals[o] * 10) > v).length;
+  } return r; };
+
+// monthResults: { 월(숫자): compute() 결과 }
+function buildReport(monthResults) {
+  const loaded = Object.keys(monthResults).map(Number).sort((a, b) => a - b);
+  const maxM = Math.max(6, ...loaded);
+  const months = Array.from({ length: maxM }, (_, i) => i + 1);
+  const q = loaded.filter(m => m > 6);                      // 3분기(7월~) 불러온 월
+  const avg = {}, ratio = {}, hit = {};
+  for (const o of ROWS) avg[o] = {};
+  for (const o of ORG5) { ratio[o] = {}; hit[o] = {}; }
+  for (const m of months) {
+    const res = monthResults[m];
+    for (const o of ROWS) {
+      if (res) { const t = o === '전사' ? res.total : res.stats.get(o); avg[o][m] = t && t.n ? t.sum / t.n / 60 : null; }
+      else avg[o][m] = m <= 6 ? H1_AVG[o][m - 1] : null;
+    }
+    for (const o of ORG5) {
+      if (res) {
+        const ps = res.list.filter(p => !p.excluded && p.org === o);
+        const h = ps.filter(p => p.avgMin >= CAP_MIN - 1e-6).length;
+        ratio[o][m] = ps.length ? h / ps.length * 100 : null; hit[o][m] = { n: ps.length, h };
+      } else ratio[o][m] = m <= 6 ? H1_RATIO[o][m - 1] : null;
+    }
+  }
+  const vals = (o, src) => months.map(m => src[o][m]).filter(v => v != null);
+  const q3avg = {}, allAvg = {}, std = {}, q3ratio = {}, allRatio = {}, h1ratio = {};
+  for (const o of ROWS) {
+    q3avg[o] = q.length ? mean(q.map(m => avg[o][m]).filter(v => v != null)) : null;
+    allAvg[o] = mean(vals(o, avg)); std[o] = popStd(vals(o, avg));
+  }
+  for (const o of ORG5) {
+    q3ratio[o] = q.length ? mean(q.map(m => ratio[o][m]).filter(v => v != null)) : null;
+    allRatio[o] = mean(vals(o, ratio)); h1ratio[o] = mean(H1_RATIO[o]);
+  }
+  const stdLine = mean(ORG5.map(o => std[o])), xLine = allAvg['전사'];
+  const quad = {};
+  for (const o of ORG5) {
+    const hiX = allAvg[o] >= xLine, hiY = std[o] >= stdLine;
+    quad[o] = hiX && hiY ? '고강도형' : !hiX && hiY ? '스파이크형' : !hiX && !hiY ? '저부하형' : '지속형';
+  }
+  // 3분기 개인 평균 → 우주 부서별 평균·위험군
+  const persons = new Map();
+  for (const m of q) for (const p of monthResults[m].list) {
+    if (p.excluded) continue;
+    const e = persons.get(p.key) || { org: p.org, dept: p.dept, mins: [] };
+    e.mins.push(p.avgMin); e.org = p.org; e.dept = p.dept; persons.set(p.key, e);
+  }
+  const dmap = new Map(), total = { n: 0, sum: 0, g: [0, 0, 0, 0] };
+  for (const e of persons.values()) {
+    if (e.org !== REPORT_ORG) continue;
+    const h = mean(e.mins) / 60, gi = RISK_GROUPS.findIndex(g => g.test(h));
+    const d = dmap.get(e.dept) || { dept: e.dept, n: 0, sum: 0, g: [0, 0, 0, 0] };
+    d.n++; d.sum += h; d.g[gi]++; dmap.set(e.dept, d);
+    total.n++; total.sum += h; total.g[gi]++;
+  }
+  const dept = [...dmap.values()].map(d => ({ ...d, avg: d.sum / d.n, report: SPACE_DEPTS.includes(d.dept) }))
+    .sort((a, b) => b.avg - a.avg);
+  return { months, q, avg, ratio, hit, q3avg, allAvg, std, stdLine, xLine, quad, q3ratio, allRatio, h1ratio,
+    rankQ3: rankMap(Object.fromEntries(ORG5.map(o => [o, q3avg[o]]))),
+    rankAll: rankMap(Object.fromEntries(ORG5.map(o => [o, allAvg[o]]))),
+    rankMonth: Object.fromEntries(months.map(m => [m, rankMap(Object.fromEntries(ORG5.map(o => [o, avg[o][m]])))])),
+    rankRatioQ3: rankMap(Object.fromEntries(ORG5.map(o => [o, q3ratio[o]]))),
+    dept, spaceTotal: { ...total, avg: total.n ? total.sum / total.n : null } };
+}
+// ==REPORT-END==
+
+// ===== 화면 =====
+const FILES = {};            // 월 -> { name, table }
+const RESULTS = {};          // 월 -> compute() 결과
+let REPORT = null;
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const f1 = v => v == null ? '-' : r1(v);
+const pc = v => v == null ? '-' : r1(v) + '%';
+const rk = n => n == null ? '' : '<br><span class="s">(' + n + '위)</span>';
+
+function monthOf(res, fname) {
+  const m = String(res.ym).match(/(\d{4})\D?(\d{1,2})/);
+  if (m) return +m[2];
+  const f = String(fname).match(/(\d{1,2})\s*월/); return f ? +f[1] : null;
+}
+
+function recompute() {
+  for (const k of Object.keys(RESULTS)) delete RESULTS[k];
+  const opts = { excludeMid: $('optMid').checked };
+  const info = [];
+  for (const [mth, f] of Object.entries(FILES)) {
+    const res = compute(f.table, opts); RESULTS[mth] = res;
+    const ex = res.list.filter(p => p.excluded).length;
+    info.push(f.name + ' → ' + mth + '월 (유효 ' + res.validRows.toLocaleString('ko-KR') + '건 / 전체 ' + res.totalRows.toLocaleString('ko-KR') + '건, 제외 ' + ex + '명, ' + res.maxWeek + '주)');
+  }
+  $('fileInfo').innerHTML = info.length ? '불러온 파일<br>' + info.map(esc).join('<br>') : '월별 주차 근태실적 CSV를 불러오세요. 7·8·9월 파일을 한 번에 선택할 수 있습니다. (브라우저 안에서만 처리되며 외부로 전송되지 않습니다)';
+  if (!info.length) { $('out').innerHTML = ''; return; }
+  REPORT = buildReport(RESULTS); render();
+}
+
+function tbl(id, head, body, title, hint) {
+  return '<div class="card"><div class="p-head"><h2>' + title + '</h2><button class="btn ghost sm" onclick="copyTable(\'' + id + '\')">표 복사</button></div>'
+    + '<div class="scroll"><table id="' + id + '">' + head + body + '</table></div>' + (hint ? '<div class="hint">' + hint + '</div>' : '') + '</div>';
+}
+const hr = cells => '<thead><tr class="h">' + cells.map(c => '<th' + (c.sp ? ' ' + c.sp : '') + '>' + c.t + '</th>').join('') + '</tr></thead>';
+
+function render() {
+  const R = REPORT, q = R.q, N = R.months.length, hasQ = q.length > 0;
+  const qn = q.map(m => m + '월'), last = N;
+  let html = '';
+
+  // 1안
+  let h = '<thead><tr class="h"><th rowspan="2">사업부</th><th>상반기</th>' + (hasQ ? '<th colspan="' + q.length + '">3분기</th><th rowspan="2">3분기<br>평균</th>' : '') + '<th rowspan="2">1~' + last + '월<br>평균</th></tr>'
+    + '<tr class="h"><th>1~6월 평균</th>' + q.map(m => '<th>' + m + '월</th>').join('') + '</tr></thead>';
+  let b = '<tbody>' + ROWS.map(o => {
+    const sp = o === REPORT_ORG, cls = sp ? ' class="hl"' : '';
+    const rkq = m => sp ? rk(R.rankMonth[m][o]) : '';
+    return '<tr' + cls + '><td class="n">' + o + '</td><td>' + H1_AVG_REPORTED[o].toFixed(1) + (sp ? rk(3) : '') + '</td>'
+      + q.map(m => '<td>' + f1(R.avg[o][m]) + rkq(m) + '</td>').join('')
+      + (hasQ ? '<td>' + f1(R.q3avg[o]) + (sp ? rk(R.rankQ3[o]) : '') + '</td>' : '')
+      + '<td>' + f1(R.allAvg[o]) + (sp ? rk(R.rankAll[o]) : '') + '</td></tr>';
+  }).join('') + '</tbody>';
+  html += tbl('t1', h, b, '① 사업부별 근무시간 — 1안 (상반기 평균 + 3분기)', '상반기 평균·순위는 기존 보고서 값입니다(상반기 순위는 5개 조직 기준 3위로 고정 입력). 평균은 월별 평균의 단순 평균입니다. 우주 행의 괄호는 5개 조직 중 순위입니다.');
+
+  // 2안
+  h = '<thead><tr class="h"><th>사업부</th>' + R.months.map(m => '<th>' + m + '월</th>').join('') + '<th>평균</th></tr></thead>';
+  b = '<tbody>' + ROWS.map(o => {
+    const sp = o === REPORT_ORG;
+    return '<tr' + (sp ? ' class="hl"' : '') + '><td class="n">' + o + '</td>' + R.months.map(m => '<td>' + f1(R.avg[o][m]) + (sp && R.rankMonth[m] ? rk(R.rankMonth[m][o]) : '') + '</td>').join('')
+      + '<td>' + f1(R.allAvg[o]) + (sp ? rk(R.rankAll[o]) : '') + '</td></tr>';
+  }).join('') + '</tbody>';
+  html += tbl('t2', h, b, '② 사업부별 근무시간 — 2안 (월별 전체)', '불러오지 않은 월은 "-"로 표시됩니다.');
+
+  // 요약 문구
+  const sp = REPORT_ORG, order = ORG5.slice().sort((a, b) => R.allAvg[b] - R.allAvg[a]);
+  const short = { 'DE사업부':'DE','해양사업부':'해양','우주사업부':'우주','구미사업장':'구미','MRO사업부':'MRO' };
+  const diff = R.allAvg[sp] != null ? Math.round(R.allAvg[sp] * 10) / 10 - Math.round(R.allAvg['전사'] * 10) / 10 : 0;
+  let s = '• 우주사업부 1~' + last + '월 평균 근무시간 ' + f1(R.allAvg[sp]) + '시간 (5개 조직 중 ' + R.rankAll[sp] + '위)'
+    + (hasQ ? ', 3분기 ' + f1(R.q3avg[sp]) + '시간 (' + R.rankQ3[sp] + '위)' : '') + '<br>'
+    + '&nbsp;&nbsp;· 전사 평균(' + f1(R.allAvg['전사']) + '시간) 대비 ' + (diff >= 0 ? '+' : '') + diff.toFixed(1) + '시간<br>'
+    + '&nbsp;&nbsp;· ' + order.map(o => short[o] + '(' + f1(R.allAvg[o]) + ')').join(' > ');
+  html += '<div class="card"><h2>③ 요약 문구 초안</h2><div class="sum">' + s + '</div></div>';
+
+  // 사분면
+  h = hr([{t:'사업부'},{t:'평균 근무시간<br>(1~' + last + '월)'},{t:'표준편차<br>(월 평균 기준)'},{t:'유형'}]);
+  b = '<tbody>' + ROWS.slice(0, 5).map(o => '<tr' + (o === sp ? ' class="hl"' : '') + '><td class="n">' + o + '</td><td>' + f1(R.allAvg[o]) + '</td><td>' + R.std[o].toFixed(2) + '</td><td>' + R.quad[o] + '</td></tr>').join('')
+    + '<tr class="total"><td class="n">기준선</td><td>' + f1(R.xLine) + ' (전사)</td><td>' + R.stdLine.toFixed(2) + ' (평균)</td><td></td></tr></tbody>';
+  html += tbl('t3', h, b, '④ 근무 패턴 사분면 (표준편차)', '표준편차 = 월별 평균(1~' + last + '월)의 모표준편차, 세로 기준선 = 전사 평균, 가로 기준선 = 5개 조직 표준편차 평균. 상반기 값은 보고서 표시값(소수 첫째 자리) 기준이라 둘째 자리 오차가 있을 수 있습니다.');
+
+  // 52시간 비율
+  h = '<thead><tr class="h"><th>사업부</th>' + R.months.map(m => '<th>' + m + '월</th>').join('') + '<th>상반기<br>평균</th>' + (hasQ ? '<th>3분기<br>평균</th>' : '') + '<th>1~' + last + '월<br>평균</th></tr></thead>';
+  b = '<tbody>' + ORG5.map(o => '<tr' + (o === sp ? ' class="hl"' : '') + '><td class="n">' + o + '</td>' + R.months.map(m => '<td>' + pc(R.ratio[o][m]) + (R.hit[o][m] ? '<br><span class="s">' + R.hit[o][m].h + '/' + R.hit[o][m].n + '명</span>' : '') + '</td>').join('')
+    + '<td>' + pc(R.h1ratio[o]) + '</td>' + (hasQ ? '<td>' + pc(R.q3ratio[o]) + (o === sp ? rk(R.rankRatioQ3[o]) : '') + '</td>' : '') + '<td>' + pc(R.allRatio[o]) + '</td></tr>').join('') + '</tbody>';
+  html += tbl('t4', h, b, '⑤ 주 52시간 근무자 비율', '비율 = 월 평균 근무시간이 52.0시간(모든 주 상한 도달)인 인원 ÷ 계산 대상 인원. 상반기 월별 값은 기존 보고서 값입니다.');
+
+  // 우주 부서별
+  const rep = R.dept.filter(d => d.report), oth = R.dept.filter(d => !d.report);
+  h = hr([{t:'부서'},{t:'인원'},{t:'3분기 평균<br>근무시간'},{t:'평균 대비'}]);
+  const st = R.spaceTotal;
+  const drow = d => '<tr><td class="n">' + esc(d.dept) + '</td><td>' + d.n + '</td><td>' + f1(d.avg) + '</td><td>' + (d.avg - st.avg >= 0 ? '+' : '') + (Math.round(d.avg * 10) / 10 - Math.round(st.avg * 10) / 10).toFixed(1) + '</td></tr>';
+  b = '<tbody>' + (st.n ? rep.map(drow).join('') + '<tr class="total"><td class="n">우주사업부 전체</td><td>' + st.n + '</td><td>' + f1(st.avg) + '</td><td></td></tr>'
+    + (oth.length ? '<tr><td colspan="4" class="s" style="text-align:left;color:var(--slate)">— 보고서 12개 부서 외 —</td></tr>' + oth.map(drow).join('') : '') : '<tr><td colspan="4">3분기(7월 이후) 파일이 없습니다.</td></tr>') + '</tbody>';
+  html += tbl('t5', h, b, '⑥ 우주사업부 부서별 3분기 평균 근무시간', '개인별 3분기 평균(불러온 월 평균)을 부서(마지막 월 소속)별로 평균. 상반기 부서별 값은 기존 보고서를 유지하고 3분기를 추가하는 용도입니다.');
+
+  // 위험군
+  h = hr([{t:'부서'},{t:'인원'}, ...RISK_GROUPS.map(g => ({ t: g.name + '<br><span class="s">' + g.desc + '</span>' })), {t:'48시간↑<br>(그룹3+4)'}]);
+  const grow = (name, d, cls) => '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td class="n">' + esc(name) + '</td><td>' + d.n + '</td>' + d.g.map(x => '<td>' + pc(x / d.n * 100) + '<br><span class="s">' + x + '명</span></td>').join('') + '<td>' + pc((d.g[2] + d.g[3]) / d.n * 100) + '</td></tr>';
+  b = '<tbody>' + (st.n ? rep.map(d => grow(d.dept, d)).join('') + grow('우주사업부 전체', st, 'total') : '<tr><td colspan="7">3분기(7월 이후) 파일이 없습니다.</td></tr>') + '</tbody>';
+  html += tbl('t6', h, b, '⑦ 우주사업부 부서별 위험군 구성비 (3분기 평균 기준)', '개인별 3분기 평균 근무시간으로 4개 그룹 분류. 그룹4 = 평균 52.0시간(모든 주 상한 도달).');
+
+  // 제외 인원
+  let ex = '<div class="card"><h2>월별 계산 제외 인원</h2>';
+  for (const m of Object.keys(RESULTS)) {
+    const list = RESULTS[m].list.filter(p => p.excluded), cnt = {};
+    list.forEach(p => { const k = p.excluded.replace(/\(.*\)/, ''); cnt[k] = (cnt[k] || 0) + 1; });
+    ex += '<div class="hint">' + m + '월: 총 ' + list.length + '명 — ' + (Object.entries(cnt).map(([k, v]) => k + ' ' + v).join(', ') || '없음') + '</div>';
+  }
+  html += ex + '</div>';
+  $('out').innerHTML = html;
+}
+
+function copyTable(id) {
+  const t = $(id);
+  const txt = [...t.querySelectorAll('tr')].map(tr => [...tr.children].map(c => c.innerText.replace(/\s*\n\s*/g, ' ').trim()).join('\t')).join('\n');
+  const done = () => { const b = document.activeElement; if (b && b.tagName === 'BUTTON') { const o = b.textContent; b.textContent = '복사됨 ✓'; setTimeout(() => b.textContent = o, 1200); } };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(done);
+  else { const a = document.createElement('textarea'); a.value = txt; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); done(); }
+}
+
+$('csvFiles').addEventListener('change', async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  for (const f of files) {
+    try {
+      const table = parseCSV(decodeBuffer(await f.arrayBuffer()));
+      const res = compute(table, {});
+      const m = monthOf(res, f.name);
+      if (!m) { $('fileInfo').innerHTML = '<span class="err">' + esc(f.name) + ': 년월을 확인할 수 없습니다.</span>'; continue; }
+      FILES[m] = { name: f.name, table };
+    } catch (err) { $('fileInfo').innerHTML = '<span class="err">' + esc(f.name) + ' 읽기 실패: ' + esc(err.message) + '</span>'; }
+  }
+  recompute();
+});
+$('optMid').addEventListener('change', recompute);
+$('btnClear').addEventListener('click', () => { for (const k of Object.keys(FILES)) delete FILES[k]; recompute(); });
+
+recompute();
+</script>
+</body>
+</html>
