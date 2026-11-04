@@ -112,7 +112,7 @@
 const CAP_MIN = 3120;                       // 주 52시간 상한(분)
 const EXCLUDE_GUBUN = '근태예외자';
 const EXCLUDE_RANKS = ['부사장','비상근고문','상무','전무','회장','사외이사','사장','예술인'];
-const EXCLUD_DEPTS = ['제조팀'];
+const EXCLUDE_DEPTS = ['제조팀'];           // 계산 제외 부서
 
 // 조직(사업부) 매핑 — 조직개편 시 아래 목록만 수정하면 됩니다. (로데이터 '부서명' 기준)
 const ORG_MAP = {
@@ -370,4 +370,3 @@ $('orgTable').addEventListener('click', e => {
 </script>
 </body>
 </html>
-
