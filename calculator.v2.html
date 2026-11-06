@@ -1,1 +1,560 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>근무시간 계산기 v2</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#1c2430;--mute:#6b7685;--line:#e1e5eb;--pri:#e8590c;--pri2:#fff1e8;--bad:#c92a2a;--badbg:#fff0f0;--ok:#2b8a3e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
+header{background:#1c2430;color:#fff;padding:18px 28px}
+header h1{margin:0;font-size:20px}
+header p{margin:4px 0 0;color:#aab4c3;font-size:12.5px}
+main{max-width:1280px;margin:0 auto;padding:20px}
+section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:16px}
+h2{margin:0 0 12px;font-size:15px}
+h2 .n{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;border-radius:50%;background:var(--pri);color:#fff;font-size:12px;margin-right:6px}
+.drop{border:2px dashed #c3cad5;border-radius:8px;padding:22px;text-align:center;color:var(--mute);cursor:pointer}
+.drop.on{border-color:var(--pri);background:var(--pri2)}
+.files{margin-top:10px}
+.frow{display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.frow .nm{flex:1;word-break:break-all}
+.frow .meta{color:var(--mute);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px 16px}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mute)}
+select,input[type=text],input[type=number],textarea{font:inherit;padding:6px 8px;border:1px solid #c3cad5;border-radius:6px;background:#fff;color:var(--ink)}
+textarea{width:100%;min-height:54px}
+button{font:inherit;cursor:pointer;border:1px solid #c3cad5;background:#fff;border-radius:6px;padding:7px 14px}
+button.pri{background:var(--pri);border-color:var(--pri);color:#fff;font-weight:600}
+button.sm{padding:3px 9px;font-size:12px}
+.row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+.chk{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink)}
+.hint{color:var(--mute);font-size:12px;margin-top:6px}
+.warn{background:#fff8e1;border:1px solid #ffe08a;border-radius:6px;padding:8px 12px;margin-top:10px;font-size:12.5px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.tab{padding:8px 16px;border:none;border-bottom:3px solid transparent;border-radius:0;background:none;color:var(--mute)}
+.tab.on{color:var(--pri);border-bottom-color:var(--pri);font-weight:700}
+.kpis{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.kpi{flex:1;min-width:150px;background:var(--bg);border-radius:8px;padding:10px 14px}
+.kpi b{display:block;font-size:20px}
+.kpi span{color:var(--mute);font-size:12px}
+.tw{overflow:auto;max-height:560px;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:right}
+th{position:sticky;top:0;background:#eef1f5;cursor:pointer;user-select:none;z-index:1}
+th:first-child,td:first-child,th.l,td.l{text-align:left}
+tr.tot td{background:#f7f0ea;font-weight:700}
+tr:hover td{background:#fffaf5}
+td.over{color:var(--bad);font-weight:700;background:var(--badbg)}
+.badge{display:inline-block;font-size:11px;padding:0 6px;border-radius:9px;background:#e7f0ff;color:#1c5ed6;margin-left:4px}
+.badge.d{background:#ffe3e3;color:var(--bad)}
+.sub{margin:16px 0 6px;font-size:13px;font-weight:700}
+.detail{margin-top:14px;padding:12px;background:var(--bg);border-radius:8px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>근무시간 계산기 <span style="font-size:12px;color:#ffb380">v2 · 근태예외자·제조팀 제외</span></h1>
+  <p>주차별 근태 CSV를 넣으면 개인별·사업부별 월평균 근무시간과 52시간 초과 현황을 계산합니다. 모든 계산은 브라우저 안에서만 이루어지며 데이터는 어디에도 전송·저장되지 않습니다.</p>
+</header>
+<main>
+
+<section>
+  <h2><span class="n">1</span>CSV 불러오기</h2>
+  <div class="drop" id="drop">CSV 파일을 여기에 끌어다 놓거나 클릭해서 선택 (월별 파일 여러 개 동시 선택 가능)</div>
+  <input type="file" id="file" accept=".csv,.txt,.tsv" multiple class="hidden">
+  <div class="files" id="files"></div>
+  <div class="hint">UTF-8 / 엑셀 CSV(EUC-KR)를 자동 인식합니다. 파일에 월 정보가 없으면 오른쪽 '월 지정'에서 지정하거나 파일명의 '7월' 같은 표기를 사용합니다.</div>
+</section>
+
+<section id="secMap" class="hidden">
+  <h2><span class="n">2</span>컬럼 매핑 <span style="font-weight:400;color:var(--mute);font-size:12px">(자동 인식 결과를 확인하고, 틀리면 바꿔주세요)</span></h2>
+  <div class="row" style="margin-bottom:10px">
+    <label class="chk"><input type="radio" name="mode" value="long" checked>세로형 (한 행 = 한 사람의 한 주차)</label>
+    <label class="chk"><input type="radio" name="mode" value="wide">가로형 (주차/월이 열로 펼쳐진 형태)</label>
+  </div>
+  <div class="grid" id="mapGrid"></div>
+  <div id="wideBox" class="hidden" style="margin-top:12px">
+    <div class="hint" style="margin:0 0 6px">근무시간 값이 들어있는 열을 모두 체크하세요. 열 이름(예: 7월1주, 2026-07-06)에서 월을 읽습니다.</div>
+    <div class="row" id="wideCols"></div>
+  </div>
+  <div class="warn hidden" id="mapWarn"></div>
+</section>
+
+<section id="secSet" class="hidden">
+  <h2><span class="n">3</span>계산 기준</h2>
+  <div class="grid">
+    <label class="f">초과 기준 (시간, 초과 = 기준값 초과)<input type="number" id="th" value="52" step="0.5"></label>
+    <label class="f">기간 평균 산출 방식
+      <select id="avgMode"><option value="weeks">전체 주차 평균</option><option value="months">월평균의 평균</option></select></label>
+    <label class="f">날짜형 주차의 월 귀속
+      <select id="thu"><option value="asis">날짜 그대로</option><option value="thu">해당 주 목요일 기준</option></select></label>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <label class="chk"><input type="checkbox" id="exZero" checked>0시간·빈칸 제외 (휴가·결근 주차가 평균을 깎지 않도록)</label>
+    <label class="chk"><input type="checkbox" id="dedup" checked>같은 사번·같은 주차 중복 행은 마지막 값만 사용</label>
+  </div>
+  <div class="sub">제외 대상</div>
+  <div class="row">
+    <label class="chk"><input type="checkbox" id="exExc" checked>근태 예외자 제외</label>
+    <label class="chk"><input type="checkbox" id="exMfg" checked>제외 부서 적용</label>
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">제외 부서명(쉼표 구분, 정확히 일치)<input type="text" id="exDept" value="제조팀" style="width:200px"></label>
+  </div>
+  <label class="f" style="margin-top:8px">근태 예외자 사번 목록 (예외자 열이 없을 때 붙여넣기 · 줄바꿈/쉼표 구분)<textarea id="excIds" placeholder="예: S100012, S100034"></textarea></label>
+  <div class="hint">예외자 열을 지정하면 값이 비어있지 않고 N/0/아니오/없음이 아닌 행을 예외자로 봅니다. 두 방법을 함께 써도 됩니다. 부서명은 소속 열 또는 보조 조직열의 값과 비교합니다.</div>
+  <div class="sub">시간 단위·보정</div>
+  <div class="row">
+    <label class="f">근무시간 단위<select id="unit"><option value="auto">자동 (값이 200 초과면 분)</option><option value="hours">시간</option><option value="min">분 (÷60)</option></select></label>
+    <label class="chk"><input type="checkbox" id="clamp">주 시간 보정</label>
+    <label class="f">하한(h)<input type="number" id="lo" value="40" style="width:80px"></label>
+    <label class="f">상한(h)<input type="number" id="hi" value="52" style="width:80px"></label>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <label class="chk"><input type="checkbox" id="orgMap" checked>10/1 조직개편 기준 사업부 매핑 적용 (조직명 → 사업부, 목록에 없으면 지원조직)</label>
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">지원조직 표시 명칭<input type="text" id="staffName" value="지원조직" style="width:120px"></label>
+  </div>
+  <label class="f" style="margin-top:10px">사업부 표시 순서 (쉼표 구분, 이름에 해당 글자가 포함되면 그 순서로 정렬)
+    <textarea id="order">DE, 우주, 해양, MRO, 기반연구소, 구미사업장, 대공사업단, 기타 (지원조직은 항상 맨 아래)</textarea></label>
+  <div style="margin-top:12px"><button class="pri" id="go">계산하기</button></div>
+</section>
+
+<section id="secRes" class="hidden">
+  <h2><span class="n">4</span>결과</h2>
+  <div class="row" style="margin-bottom:10px">
+    <div id="monthChks" class="row" style="gap:10px"></div>
+  </div>
+  <div class="hint" id="unm"></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="tabs">
+    <button class="tab on" data-t="dept">사업부별</button>
+    <button class="tab" data-t="person">개인별 조회</button>
+  </div>
+
+  <div id="tDept">
+    <div class="row" style="margin-bottom:8px">
+      <label class="f">집계 기준<select id="by"><option value="grp">소속(사업부)</option><option value="job">직군</option></select></label>
+      <button class="sm" id="expDept">CSV로 내려받기</button>
+    </div>
+    <div class="sub">① 평균 근무시간 (인당 월평균의 평균)</div>
+    <div class="tw" id="deptAvg"></div>
+    <div class="sub">② 52시간 초과 현황 (월평균이 기준 초과한 인원)</div>
+    <div class="tw" id="deptOver"></div>
+  </div>
+
+  <div id="tPerson" class="hidden">
+    <div class="row" style="margin-bottom:8px">
+      <label class="f">사번 / 이름 검색<input type="text" id="q" placeholder="예: 홍길동 또는 사번 일부" style="width:220px"></label>
+      <label class="f">소속<select id="gf"><option value="">전체</option></select></label>
+      <label class="chk"><input type="checkbox" id="onlyOver">초과 경험자만</label>
+      <button class="sm" id="expPerson">현재 목록 CSV로 내려받기</button>
+    </div>
+    <div class="hint" id="pCount" style="margin:0 0 6px"></div>
+    <div class="tw" id="pTable"></div>
+    <div class="detail hidden" id="pDetail"></div>
+  </div>
+</section>
+</main>
+
+<script>
+'use strict';
+/* ---------- 유틸 ---------- */
+const $ = s => document.querySelector(s);
+const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const f1 = x => (x == null || isNaN(x)) ? '-' : x.toFixed(1);
+const pct = (a, b) => b ? (a / b * 100).toFixed(1) + '%' : '-';
+const mean = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : null;
+const sd = a => { if (a.length < 2) return null; const m = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1)); };
+
+/* ---------- CSV 파싱 ---------- */
+function decode(buf) {
+  try { return new TextDecoder('utf-8', {fatal: true}).decode(buf).replace(/^﻿/, ''); }
+  catch (e) { return new TextDecoder('euc-kr').decode(buf); }
+}
+function parseCSV(text) {
+  const first = text.split(/\r?\n/, 1)[0];
+  const cnt = ch => first.split(ch).length - 1;
+  const d = cnt('\t') > cnt(',') && cnt('\t') >= cnt(';') ? '\t' : (cnt(';') > cnt(',') ? ';' : ',');
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === d) { row.push(cur); cur = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(cur); cur = '';
+      if (row.some(x => x !== '')) rows.push(row);
+      row = [];
+    } else cur += c;
+  }
+  row.push(cur); if (row.some(x => x !== '')) rows.push(row);
+  return rows;
+}
+
+/* ---------- 값 해석 ---------- */
+function parseHours(v) {
+  if (v == null) return null;
+  const s = String(v).trim().replace(/,/g, '');
+  if (!s) return null;
+  let m;
+  if ((m = s.match(/^(\d+):(\d{2})(?::\d{2})?$/))) return +m[1] + +m[2] / 60;
+  if ((m = s.match(/^(\d+(?:\.\d+)?)\s*시간(?:\s*(\d+)\s*분)?$/))) return +m[1] + (m[2] ? +m[2] / 60 : 0);
+  if ((m = s.match(/^(\d+(?:\.\d+)?)\s*h?$/i))) return +m[1];
+  return null;
+}
+function monthOf(label, useThu) {
+  if (label == null) return null;
+  const s = String(label).trim();
+  let m;
+  if ((m = s.match(/(20\d{2})[-./]?(\d{1,2})[-./]?(\d{1,2})(?!\d)/))) {
+    const dt = new Date(+m[1], +m[2] - 1, +m[3]);
+    if (!isNaN(dt)) {
+      if (useThu) { const dow = (dt.getDay() + 6) % 7; dt.setDate(dt.getDate() - dow + 3); }
+      return dt.getMonth() + 1;
+    }
+  }
+  if ((m = s.match(/^(20\d{2})[-./]?(\d{2})$/))) return +m[2];
+  if ((m = s.match(/(\d{1,2})\s*월/))) return +m[1];
+  return null;
+}
+
+/* ---------- 상태 ---------- */
+let files = [];   // {name, headers, rows, month}
+let P = [];       // 계산된 개인 목록
+let MONTHS = [];  // 존재하는 월
+let sel = new Set();
+
+const FIELDS = [
+  ['id',   '사번',            [/사번|사원번호|^id$|emp/i]],
+  ['name', '이름',            [/성명|이름|^name/i]],
+  ['grp',  '소속(사업부)',    [/사업부|본부|부문|소속|조직|부서|팀|실$/]],
+  ['job',  '직군(선택)',      [/직군|직종|직무/]],
+  ['month','월 열(선택)',     [/^월$|^month$|년월|기준월/i]],
+  ['week', '주차/일자 열',    [/주차|^주$|week|일자|날짜|기준일|기간/i]],
+  ['hours','근무시간 열',     [/체류시간|근무시간|근로시간|총.*시간|hours/i, /시간/]],
+  ['grp2', '보조 조직열(선택, 팀명 등)', []],
+  ['exc', '근태예외자 열(선택)', [/예외/]]
+];
+
+/* ---------- 조직개편(10/1) 매핑: 조직명 → 사업부. 수정은 여기서 ---------- */
+const ORG_SRC = {
+  'DE사업부': 'DE사업부, DE사업전략담당, 글로벌마케팅팀, DE사업전략팀, DE사업운영팀, DE사업인사팀, C5ISR사업센터, C5ISR사업단, 통신연구소, 지휘통제1팀, 지휘통제2팀, 통신1팀, 통신2팀, 통신3팀, 통신4팀, 무인체계연구소, 지상시스템1팀, 지상시스템2팀, 지상시스템3팀, 지상시스템4팀, SW팀(지상), 항공시스템개발팀, SW팀(항공), 레이다사업센터, 레이다사업단, 레이다연구소, 지상레이다체계1팀, 지상레이다체계2팀, 해상레이다체계팀, 항공레이다체계팀, HW팀(레이다), 첨단레이다팀, SW팀(레이다), 레이저사업센터, 레이저사업단, 레이저연구소, 레이저1팀, 레이저2팀, 레이저3팀, 전자광학체계1팀, 전자광학체계2팀, 전자광학체계3팀, 전자광학체계4팀, 단거리레이다TF팀, 사우디MNG TF',
+  '우주사업부': '우주사업총괄, 우주사업부, 우주사업전략팀, 우주사업단, 솔루션사업팀, 차세대위성체계팀, 우주연구소, 위성체계팀, 위성본체팀, 위성탑재체1팀, 위성탑재체2팀, 위성탑재체3팀, 위성지상체팀, 위성기계팀, 제주우주센터, 대관지원팀, 우주생산팀',
+  '해양사업부': '해양사업부, 해양사업전략팀, 해양사업단, 소나개발팀, 해양연구소, 해양시스템1팀, 해양시스템2팀, 해양시스템3팀, 해양시스템4팀, 해양시스템5팀, 해양SW1팀, 해양SW2팀, Smart Vessel사업센터, Smart Vessel사업팀, Smart Battleship설계팀, 플랫폼체계팀, 무인체계팀',
+  'MRO사업부': 'MRO사업부, MRO사업개발TF팀, MRO사업전략팀, MRO사업운영팀, MRO사업단, 시스템MRO팀, 방공MRO1팀, 방공MRO2팀, 해양MRO팀, IPS1팀, IPS2팀, 시험기술팀, 고객지원팀',
+  '기반연구소': '기반연구소, 연구기획팀, AI팀, 차세대반도체팀, 차세대단말기팀, MUM-T팀, 사이버시큐리티팀, HW1팀, HW2팀, HW3팀',
+  '구미사업장': '구미사업장, 체계기술1팀, 체계기술2팀, 체계시험1팀, 체계시험2팀, 체계시험3팀, 체계시험4팀, 기계기술팀, 제조팀, 운영팀(구미), 생산관리팀, 생산기술팀, 자재관리팀, 안전환경팀(구미)',
+  '대공사업단': '대공사업단, 대공사업전략팀, 대공사업팀, 대공솔루션팀',
+  '기타': '사장실, 고문실, 임원실, C-UAS'
+};
+const normOrg = s => String(s || '').replace(/[\s\u00a0]+/g, '').toUpperCase();
+const ORG_MAP = new Map();
+Object.entries(ORG_SRC).forEach(([div, list]) => list.split(',').forEach(n => ORG_MAP.set(normOrg(n), div)));
+let EXCL = {exc: new Set(), dept: new Set()};
+let UNM = new Map();  // 지원조직으로 분류된 조직명 → 행수
+function divisionOf(a, b) {
+  if (!$('#orgMap').checked) return a;
+  const d = ORG_MAP.get(normOrg(a)) || ORG_MAP.get(normOrg(b));
+  if (d) return d;
+  const raw = a || b;
+  if (!raw) return '';
+  UNM.set(raw, (UNM.get(raw) || 0) + 1);
+  return $('#staffName').value.trim() || '지원조직';
+}
+
+/* ---------- 파일 로드 ---------- */
+const drop = $('#drop'), fileIn = $('#file');
+drop.onclick = () => fileIn.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('on'); };
+drop.ondragleave = () => drop.classList.remove('on');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('on'); load(e.dataTransfer.files); };
+fileIn.onchange = () => { load(fileIn.files); fileIn.value = ''; };
+
+async function load(list) {
+  for (const f of list) {
+    const rows = parseCSV(decode(await f.arrayBuffer()));
+    if (rows.length < 2) continue;
+    const headers = rows[0].map(h => h.trim());
+    const gm = f.name.match(/(\d{1,2})\s*월/);
+    files.push({name: f.name, headers, rows: rows.slice(1), month: gm ? +gm[1] : 0});
+  }
+  renderFiles(); buildMapping();
+}
+function renderFiles() {
+  $('#files').innerHTML = files.map((f, i) =>
+    `<div class="frow"><div class="nm">${esc(f.name)}</div><div class="meta">${f.rows.length.toLocaleString()}행</div>
+     <label class="meta">월 지정 <select data-i="${i}" class="fm"><option value="0">자동</option>${[...Array(12)].map((_, k) => `<option value="${k + 1}" ${f.month === k + 1 ? 'selected' : ''}>${k + 1}월</option>`).join('')}</select></label>
+     <button class="sm" data-d="${i}">제거</button></div>`).join('');
+  document.querySelectorAll('.fm').forEach(s => s.onchange = () => files[+s.dataset.i].month = +s.value);
+  document.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { files.splice(+b.dataset.d, 1); renderFiles(); buildMapping(); });
+}
+
+/* ---------- 매핑 UI ---------- */
+function buildMapping() {
+  const has = files.length > 0;
+  $('#secMap').classList.toggle('hidden', !has); $('#secSet').classList.toggle('hidden', !has);
+  if (!has) { $('#secRes').classList.add('hidden'); return; }
+  const H = files[0].headers;
+  $('#mapGrid').innerHTML = FIELDS.map(([k, label, pats]) => {
+    let guess = '';
+    for (const p of pats) { const h = H.find(h => p.test(h)); if (h) { guess = h; break; } }
+    if (k === 'grp') { const h = H.find(h => /사업부/.test(h)) || H.find(h => /본부|부문|소속|조직|부서|팀|실$/.test(h)); if (h) guess = h; }
+    return `<label class="f">${label}<select id="m_${k}"><option value="">(없음)</option>${H.map(h => `<option ${h === guess ? 'selected' : ''}>${esc(h)}</option>`).join('')}</select></label>`;
+  }).join('');
+  const wcand = H.filter(h => monthOf(h) != null || /주/.test(h));
+  $('#wideCols').innerHTML = H.map(h => `<label class="chk"><input type="checkbox" value="${esc(h)}" ${wcand.includes(h) ? 'checked' : ''}>${esc(h)}</label>`).join('');
+  if (!H.some(h => FIELDS[6][2].some(p => p.test(h))) && wcand.length >= 3) document.querySelector('[name=mode][value=wide]').checked = true;
+  toggleMode();
+}
+function toggleMode() {
+  const wide = document.querySelector('[name=mode]:checked').value === 'wide';
+  $('#wideBox').classList.toggle('hidden', !wide);
+  ['hours', 'week'].forEach(k => { const s = $('#m_' + k); if (s) s.closest('label').classList.toggle('hidden', wide); });
+}
+document.querySelectorAll('[name=mode]').forEach(r => r.onchange = toggleMode);
+
+/* ---------- 레코드 생성 ---------- */
+function buildRecords() {
+  const wide = document.querySelector('[name=mode]:checked').value === 'wide';
+  const map = {}; FIELDS.forEach(([k]) => map[k] = $('#m_' + k).value);
+  const useThu = $('#thu').value === 'thu';
+  const exZero = $('#exZero').checked;
+  const wideCols = [...document.querySelectorAll('#wideCols input:checked')].map(c => c.value);
+  const warns = []; const out = new Map(); let noMonth = 0, badVal = 0; UNM = new Map(); EXCL = {exc: new Set(), dept: new Set()};
+  const EXD = new Set($('#exDept').value.split(/[,\n]/).map(normOrg).filter(Boolean));
+  const EXI = new Set($('#excIds').value.split(/[\s,;]+/).map(normOrg).filter(Boolean));
+  const NOEXC = /^(n|no|0|false|x|-|아니오|아니요|없음|해당없음|n\/a)$/i;
+  if (!wide && !map.hours) { warns.push('근무시간 열이 지정되지 않았습니다.'); return {recs: [], warns}; }
+  if (!map.id && !map.name) { warns.push('사번 또는 이름 열이 필요합니다.'); return {recs: [], warns}; }
+  files.forEach(f => {
+    const ix = n => n ? f.headers.indexOf(n) : -1;
+    const I = {}; ['id', 'name', 'grp', 'grp2', 'exc', 'job', 'month', 'week', 'hours'].forEach(k => I[k] = ix(map[k]));
+    if (map.id && I.id < 0) warns.push(`'${f.name}'에 '${map.id}' 열이 없어 건너뜀`);
+    if (map.id && I.id < 0) return;
+    const wi = wide ? wideCols.map(c => [c, f.headers.indexOf(c)]).filter(x => x[1] >= 0) : [];
+    f.rows.forEach(r => {
+      const id = I.id >= 0 ? (r[I.id] || '').trim() : '';
+      const name = I.name >= 0 ? (r[I.name] || '').trim() : '';
+      if (!id && !name) return;
+      const pk = id || ('N:' + name);
+      if ($('#exExc').checked) {
+        const ev = I.exc >= 0 ? String(r[I.exc] || '').trim() : '';
+        if ((ev && !NOEXC.test(ev)) || (id && EXI.has(normOrg(id)))) { EXCL.exc.add(pk); return; }
+      }
+      if ($('#exMfg').checked && EXD.size) {
+        const oa = normOrg(I.grp >= 0 ? r[I.grp] : ''), ob = normOrg(I.grp2 >= 0 ? r[I.grp2] : '');
+        if (EXD.has(oa) || EXD.has(ob)) { EXCL.dept.add(pk); return; }
+      }
+      const base = {id, name, grp: divisionOf(I.grp >= 0 ? (r[I.grp] || '').trim() : '', I.grp2 >= 0 ? (r[I.grp2] || '').trim() : ''), job: I.job >= 0 ? (r[I.job] || '').trim() : ''};
+      const push = (week, hv) => {
+        const h = parseHours(hv);
+        if (h == null) { if (String(hv || '').trim()) badVal++; return; }
+        if (exZero && h === 0) return;
+        let m = I.month >= 0 ? monthOf(r[I.month], useThu) ?? (+r[I.month] || null) : null;
+        if (m == null) m = monthOf(week, useThu);
+        if (m == null && f.month) m = f.month;
+        if (m == null) { noMonth++; return; }
+        const rec = {...base, month: m, week: week || '', h};
+        const key = (id || name) + '|' + m + '|' + (week || ('r' + Math.random()));
+        if ($('#dedup').checked && week) out.set(key, rec); else out.set(key + Math.random(), rec);
+      };
+      if (wide) wi.forEach(([c, j]) => push(c, r[j]));
+      else push(I.week >= 0 ? r[I.week] : '', r[I.hours]);
+    });
+  });
+  if (noMonth) warns.push(`월을 알 수 없어 제외된 값 ${noMonth.toLocaleString()}건 → 파일의 '월 지정'을 사용하거나 월/주차 열을 확인하세요.`);
+  if (badVal) warns.push(`숫자로 읽을 수 없어 제외된 값 ${badVal.toLocaleString()}건`);
+  const recs = [...out.values()];
+  let mx = 0; recs.forEach(r => { if (r.h > mx) mx = r.h; });
+  const unit = $('#unit').value;
+  if (unit === 'min' || (unit === 'auto' && mx > 200)) { recs.forEach(r => r.h /= 60); warns.push(`근무시간을 분 단위로 보고 시간으로 환산함 (최대값 ${mx.toLocaleString()})`); }
+  if ($('#clamp').checked) {
+    const lo = parseFloat($('#lo').value), hi = parseFloat($('#hi').value);
+    recs.forEach(r => r.h = Math.min(Math.max(r.h, lo), hi));
+    warns.push(`주 시간 보정 적용: 하한 ${lo}h · 상한 ${hi}h`);
+  }
+  return {recs, warns};
+}
+
+/* ---------- 계산 ---------- */
+let RECS = [];
+$('#go').onclick = () => {
+  const {recs, warns} = buildRecords();
+  const w = $('#mapWarn'); w.classList.toggle('hidden', !warns.length); w.innerHTML = warns.map(esc).join('<br>');
+  RECS = recs;
+  if (!recs.length) { $('#secRes').classList.add('hidden'); return; }
+  MONTHS = [...new Set(recs.map(r => r.month))].sort((a, b) => a - b);
+  sel = new Set(MONTHS);
+  $('#monthChks').innerHTML = '<span class="hint" style="margin:0">포함할 월</span>' +
+    MONTHS.map(m => `<label class="chk"><input type="checkbox" data-m="${m}" checked>${m}월</label>`).join('');
+  document.querySelectorAll('[data-m]').forEach(c => c.onchange = () => {
+    c.checked ? sel.add(+c.dataset.m) : sel.delete(+c.dataset.m); recompute();
+  });
+  $('#secRes').classList.remove('hidden');
+  recompute();
+  $('#secRes').scrollIntoView({behavior: 'smooth'});
+};
+['th', 'avgMode', 'exZero', 'dedup', 'thu', 'order', 'orgMap', 'staffName', 'exExc', 'exMfg', 'exDept', 'excIds', 'unit', 'clamp', 'lo', 'hi'].forEach(id => $('#' + id).addEventListener('change', () => { if (RECS.length) $('#go').click(); }));
+
+function recompute() {
+  const th = parseFloat($('#th').value) || 52;
+  const months = MONTHS.filter(m => sel.has(m));
+  const pm = new Map();
+  RECS.filter(r => sel.has(r.month)).forEach(r => {
+    const key = r.id || ('N:' + r.name);
+    let p = pm.get(key);
+    if (!p) pm.set(key, p = {key, id: r.id, name: r.name, grp: r.grp, job: r.job, wk: []});
+    if (r.grp) p.grp = r.grp; if (r.job) p.job = r.job;
+    p.wk.push(r);
+  });
+  const nameKeys = new Map();
+  pm.forEach(p => { if (!nameKeys.has(p.name)) nameKeys.set(p.name, new Set()); nameKeys.get(p.name).add(p.key); });
+  P = [...pm.values()].map(p => {
+    p.mavg = {}; p.mcnt = {};
+    months.forEach(m => { const a = p.wk.filter(x => x.month === m).map(x => x.h); if (a.length) { p.mavg[m] = mean(a); p.mcnt[m] = a.length; } });
+    const mv = months.filter(m => p.mavg[m] != null).map(m => p.mavg[m]);
+    p.avg = $('#avgMode').value === 'months' ? mean(mv) : mean(p.wk.map(x => x.h));
+    p.sd = sd(mv);
+    p.overM = months.filter(m => p.mavg[m] != null && p.mavg[m] > th);
+    let best = 0, run = 0;
+    months.forEach(m => { if (p.mavg[m] != null && p.mavg[m] > th) { run++; best = Math.max(best, run); } else run = 0; });
+    p.streak = best;
+    p.overW = p.wk.filter(x => x.h > th).length;
+    p.dup = (nameKeys.get(p.name) || new Set()).size > 1;
+    p.grpLabel = p.grp || '(미분류)'; p.jobLabel = p.job || '(미분류)';
+    return p;
+  });
+  CUR = {th, months};
+  const over = P.filter(p => p.overM.length);
+  const u = [...UNM.entries()].sort((a, b) => b[1] - a[1]);
+  $('#unm').innerHTML = $('#orgMap').checked ? `<details><summary>지원조직으로 분류된 조직명 ${u.length}개 (오타·누락 확인용)</summary>${u.map(([n, c]) => esc(n) + ' (' + c.toLocaleString() + '행)').join(', ') || '없음'}</details>` : '';
+  $('#kpis').innerHTML = [
+    ['대상 인원', P.length.toLocaleString() + '명'],
+    ['전체 평균', f1(mean(P.map(p => p.avg)))+ 'h'],
+    ['초과 경험자', over.length.toLocaleString() + '명 (' + pct(over.length, P.length) + ')'],
+    ['제외 인원', `근태예외자 ${EXCL.exc.size.toLocaleString()} · 제외부서 ${EXCL.dept.size.toLocaleString()}`],
+    ['동명이인 의심', P.filter(p => p.dup).length.toLocaleString() + '명'],
+    ['입력 행', RECS.filter(r => sel.has(r.month)).length.toLocaleString() + '건']
+  ].map(([a, b]) => `<div class="kpi"><b>${esc(b)}</b><span>${esc(a)}</span></div>`).join('');
+  renderDept(); renderPerson();
+}
+let CUR = {th: 52, months: []};
+
+/* ---------- 표 ---------- */
+function table(el, cols, rows, opt = {}) {
+  let sortK = null, asc = true;
+  const draw = () => {
+    let R = rows.slice();
+    if (sortK != null) R.sort((a, b) => { const x = a[sortK], y = b[sortK]; if (x == null) return 1; if (y == null) return -1; return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'ko')) * (asc ? 1 : -1); });
+    el.innerHTML = '<table><thead><tr>' + cols.map(c => `<th data-k="${c.k}" class="${c.l ? 'l' : ''}">${esc(c.t)}${sortK === c.k ? (asc ? ' ▲' : ' ▼') : ''}</th>`).join('') + '</tr></thead><tbody>' +
+      R.map((r, i) => `<tr class="${r._tot ? 'tot' : ''}" data-i="${rows.indexOf(r)}">` + cols.map(c => {
+        const v = r[c.k]; const cls = (c.l ? 'l ' : '') + (c.over && c.over(r) ? 'over' : '');
+        return `<td class="${cls}">${c.f ? c.f(v, r) : esc(v)}</td>`;
+      }).join('') + '</tr>').join('') + '</tbody></table>';
+    el.querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.k; if (sortK === k) asc = !asc; else { sortK = k; asc = true; } draw(); });
+    if (opt.onRow) el.querySelectorAll('tbody tr').forEach(tr => tr.onclick = () => opt.onRow(rows[+tr.dataset.i]));
+  };
+  draw();
+}
+function orderIndex(name) {
+  if (name === ($('#staffName').value.trim() || '지원조직')) return 1000;
+  const list = $('#order').value.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+  const i = list.findIndex(k => name.toUpperCase().includes(k.toUpperCase()));
+  return i < 0 ? 999 : i;
+}
+
+/* ---------- 사업부별 ---------- */
+let DEPT = {avg: [], over: [], cols1: [], cols2: []};
+function renderDept() {
+  const by = $('#by').value, {th, months} = CUR;
+  const g = new Map();
+  P.forEach(p => { const k = by === 'grp' ? p.grpLabel : p.jobLabel; if (!g.has(k)) g.set(k, []); g.get(k).push(p); });
+  const keys = [...g.keys()].sort((a, b) => by === 'grp' ? (orderIndex(a) - orderIndex(b) || a.localeCompare(b, 'ko')) : a.localeCompare(b, 'ko'));
+  const build = (name, arr, tot) => {
+    const o = {name, n: arr.length, _tot: tot};
+    months.forEach(m => {
+      const a = arr.filter(p => p.mavg[m] != null);
+      o['a' + m] = mean(a.map(p => p.mavg[m]));
+      o['n' + m] = a.length;
+      o['o' + m] = a.filter(p => p.mavg[m] > th).length;
+      o['r' + m] = a.length ? o['o' + m] / a.length * 100 : null;
+    });
+    o.avg = mean(arr.map(p => p.avg));
+    o.any = arr.filter(p => p.overM.length).length;
+    o.anyR = arr.length ? o.any / arr.length * 100 : null;
+    o.perAvgOver = arr.filter(p => p.avg > th).length;
+    return o;
+  };
+  const rows = keys.map(k => build(k, g.get(k), false));
+  rows.push(build('전사', P, true));
+  const c1 = [{k: 'name', t: by === 'grp' ? '소속' : '직군', l: 1}, {k: 'n', t: '인원', f: v => v.toLocaleString()}]
+    .concat(months.map(m => ({k: 'a' + m, t: m + '월 평균', f: v => f1(v), over: r => r['a' + m] > th})))
+    .concat([{k: 'avg', t: '기간 평균', f: v => f1(v), over: r => r.avg > th}]);
+  const c2 = [{k: 'name', t: by === 'grp' ? '소속' : '직군', l: 1}, {k: 'n', t: '인원', f: v => v.toLocaleString()}]
+    .concat(months.flatMap(m => [{k: 'o' + m, t: m + '월 초과인원'}, {k: 'r' + m, t: m + '월 초과율', f: v => v == null ? '-' : v.toFixed(1) + '%'}]))
+    .concat([{k: 'any', t: '기간 내 1회 이상 초과'}, {k: 'anyR', t: '비율', f: v => v == null ? '-' : v.toFixed(1) + '%'}, {k: 'perAvgOver', t: '기간평균 초과'}]);
+  DEPT = {rows, c1, c2};
+  table($('#deptAvg'), c1, rows); table($('#deptOver'), c2, rows);
+}
+$('#by').onchange = () => P.length && renderDept();
+
+/* ---------- 개인별 ---------- */
+let SHOWN = [];
+function renderPerson() {
+  const gs = [...new Set(P.map(p => p.grpLabel))].sort((a, b) => orderIndex(a) - orderIndex(b) || a.localeCompare(b, 'ko'));
+  const cur = $('#gf').value;
+  $('#gf').innerHTML = '<option value="">전체</option>' + gs.map(g => `<option ${g === cur ? 'selected' : ''}>${esc(g)}</option>`).join('');
+  drawPerson();
+}
+function drawPerson() {
+  const {th, months} = CUR;
+  const q = $('#q').value.trim().toLowerCase(), gf = $('#gf').value, oo = $('#onlyOver').checked;
+  let L = P.filter(p => (!q || (p.name || '').toLowerCase().includes(q) || (p.id || '').toLowerCase().includes(q)) &&
+    (!gf || p.grpLabel === gf) && (!oo || p.overM.length));
+  const total = L.length; SHOWN = L;
+  $('#pCount').textContent = `검색 결과 ${total.toLocaleString()}명` + (total > 300 ? ' (표에는 300명까지 표시, CSV 내려받기에는 전체 포함)' : '') + ' · 행을 클릭하면 주차별 상세가 표시됩니다.';
+  const cols = [
+    {k: 'id', t: '사번', l: 1}, {k: 'name', t: '이름', l: 1, f: (v, r) => esc(v) + (r.dup ? '<span class="badge d">동명이인</span>' : '')},
+    {k: 'grpLabel', t: '소속', l: 1}, {k: 'jobLabel', t: '직군', l: 1}
+  ].concat(months.map(m => ({k: 'm' + m, t: m + '월', f: v => f1(v), over: r => r['m' + m] > th})))
+   .concat([{k: 'avg', t: '기간 평균', f: v => f1(v), over: r => r.avg > th}, {k: 'sd', t: '월평균 표준편차', f: v => f1(v)},
+            {k: 'nOver', t: '초과 월수'}, {k: 'streak', t: '최대 연속초과 월수'}, {k: 'overW', t: '주 초과 횟수'}]);
+  const rows = L.slice(0, 300).map(p => { const o = {...p, nOver: p.overM.length}; months.forEach(m => o['m' + m] = p.mavg[m]); return o; });
+  table($('#pTable'), cols, rows, {onRow: r => detail(r)});
+  PCOLS = cols; PROWS = L.map(p => { const o = {...p, nOver: p.overM.length}; months.forEach(m => o['m' + m] = p.mavg[m]); return o; });
+}
+let PCOLS = [], PROWS = [];
+function detail(r) {
+  const d = $('#pDetail'); d.classList.remove('hidden');
+  const wk = r.wk.slice().sort((a, b) => a.month - b.month || String(a.week).localeCompare(String(b.week)));
+  d.innerHTML = `<b>${esc(r.name)}</b> (${esc(r.id)}) · ${esc(r.grpLabel)} · ${esc(r.jobLabel)}<br>` +
+    CUR.months.map(m => r.mavg[m] != null ? `${m}월 ${f1(r.mavg[m])}h (${r.mcnt[m]}주)` : `${m}월 -`).join(' / ') +
+    '<div class="tw" style="margin-top:8px;max-height:220px"><table><thead><tr><th class="l">월</th><th class="l">주차</th><th>시간</th></tr></thead><tbody>' +
+    wk.map(x => `<tr><td class="l">${x.month}월</td><td class="l">${esc(x.week)}</td><td class="${x.h > CUR.th ? 'over' : ''}">${f1(x.h)}</td></tr>`).join('') + '</tbody></table></div>';
+}
+['q', 'gf', 'onlyOver'].forEach(id => $('#' + id).addEventListener('input', () => P.length && drawPerson()));
+
+/* ---------- 탭 · 내보내기 ---------- */
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
+  $('#tDept').classList.toggle('hidden', t.dataset.t !== 'dept');
+  $('#tPerson').classList.toggle('hidden', t.dataset.t !== 'person');
+});
+function dl(name, cols, rows) {
+  const cell = v => { v = v == null ? '' : (typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(2)) : v); v = String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const csv = '﻿' + [cols.map(c => cell(c.t)).join(',')].concat(rows.map(r => cols.map(c => cell(r[c.k])).join(','))).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'})); a.download = name; a.click();
+}
+$('#expDept').onclick = () => {
+  const seen = new Set(), cols = DEPT.c1.concat(DEPT.c2).filter(c => !seen.has(c.k) && seen.add(c.k));
+  dl('사업부별_근무시간.csv', cols, DEPT.rows);
+};
+$('#expPerson').onclick = () => dl('개인별_근무시간.csv', PCOLS, PROWS);
+</script>
+</body>
+</html>
 
