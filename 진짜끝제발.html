@@ -71,9 +71,9 @@ th.q{background:#C9D7EA}
     <summary>① 계산 기준 (기본값은 합의된 기준이에요. 바꾸면 바로 다시 계산돼요)</summary>
     <div class="grid">
       <label>제외할 '구분' 값 (쉼표 구분)<textarea id="exGubun">근태예외자, T직군</textarea></label>
-      <label>제외할 '직급' 값 (쉼표 구분, 정확히 일치)<textarea id="exRank">디자이너, 부사장, 비상근고문, 사외이사, 상무, 헬스키퍼, 헬스키퍼(단), 헬스키퍼(전), 회장, 예술인, 전무, 사장, 부회장, 대표이사, 이사, 고문, 감사, 사내이사</textarea></label>
+      <label>제외할 '직급' 값 (쉼표 구분, 정확히 일치)<textarea id="exRank">부사장, 비상근고문, 사외이사, 상무, 헬스키퍼, 헬스키퍼(단), 헬스키퍼(전), 회장, 예술인, 전무, 사장, 부회장, 대표이사, 이사, 고문, 감사, 사내이사</textarea></label>
       <label>'부서명'에 이 글자가 들어 있으면 그 행을 완전히 삭제 (쉼표 구분)<input type="text" id="exDept" value="(파견"></label>
-      <label>이 글자로 시작하는 '직급' 제외<input type="text" id="prefix" value="M, T"></label>
+      <label>이 글자로 시작하는 '직급' 제외 (M·T직군, GTJ=계약직 T직군)<input type="text" id="prefix" value="M, T, GTJ"></label>
       <label>주 근무시간 하한 / 상한 (시간)<span style="display:flex;gap:6px"><input type="number" id="floor" value="40" step="0.5" style="width:90px"><input type="number" id="cap" value="52" step="0.5" style="width:90px"></span></label>
       <label>'52시간 근무자' 기준 (월평균 이상)<input type="number" id="over" value="52" step="0.1"></label>
       <label>위험군 경계 (시간, 3개)<span style="display:flex;gap:6px"><input type="number" id="b1" value="44" style="width:70px"><input type="number" id="b2" value="48" style="width:70px"><input type="number" id="b3" value="52" style="width:70px"></span></label>
@@ -213,6 +213,7 @@ $('fileInput').onchange=async e=>{
   $('fileInput').value='';
   if(RAW.length) compute();
 };
+const isPrefRank=(rk,S)=>{const t=(rk||'').trim().toUpperCase();return !!t&&S.prefix.some(p=>p&&t.startsWith(p));};
 function showErr(m){const e=$('err');e.hidden=false;e.textContent=(e.textContent&&!e.hidden?e.textContent+'\n':'')+m;}
 function clearErr(){const e=$('err');e.hidden=true;e.textContent='';}
 
@@ -271,7 +272,7 @@ function compute(){
   const addStat=(m,key,r)=>{let o=m.get(key);if(!o){o={rows:0,ids:new Set()};m.set(key,o);}o.rows++;o.ids.add(r.id);};
   rows.forEach(r=>{
     const h=r.v/div; let why=null;
-    const isG=S.exG.has(norm(r.gubun)), isR=S.exR.has(norm(r.rank)), isMT=!!r.rank&&S.prefix.includes(r.rank.trim().charAt(0).toUpperCase());
+    const isG=S.exG.has(norm(r.gubun)), isR=S.exR.has(norm(r.rank)), isMT=!!r.rank&&isPrefRank(r.rank,S);
     addStat(gStat,r.gubun||'(빈칸)',r); addStat(rStat,r.rank||'(빈칸)',r);
     if(isG) why='gubun'; else if(isR) why='rank'; else if(isMT) why='mt'; else if(S.excZero&&!(h>0)) why='zero';
     if(why){
@@ -362,13 +363,13 @@ function renderDiag(c){
   const {S,reasons,gStat,rStat,rows,dup,pm,BU_LIST,buOf,validRows,unitNote}=c;
   const allIds=new Set(rows.map(r=>r.id));
   const exRows=[
-    ['부서명 (파견) 행 삭제',reasons.dept],['구분 제외 ('+S.exG.size+'개 값)',reasons.gubun],['직급 제외 (임원·기타 목록)',reasons.rank],['직급 M·T 시작',reasons.mt],['0시간·빈칸 주차',reasons.zero]];
+    ['부서명 (파견) 행 삭제',reasons.dept],['구분 제외 ('+S.exG.size+'개 값)',reasons.gubun],['직급 제외 (임원·기타 목록)',reasons.rank],['직급 M·T·GTJ 시작',reasons.mt],['0시간·빈칸 주차',reasons.zero]];
   let h=`<div class="note">전체 ${RAW.length.toLocaleString()}행 · 중복 제거 ${dup.toLocaleString()}행 · 사번 ${allIds.size.toLocaleString()}명 · 단위 ${unitNote}</div>`;
   h+=`<h2 style="margin-top:10px">제외 현황 (한 행은 위에서부터 처음 걸린 사유 1개로만 셈)</h2>`+miniTable(['사유','제외 행 수','해당 인원(사번)','세부'],
     exRows.map(([n,o])=>[n,o.rows.toLocaleString(),o.ids.size.toLocaleString(),Object.entries(o.by).sort((a,b)=>b[1]-a[1]).slice(0,12).map(([k,v])=>`${esc(k)} ${v.toLocaleString()}`).join(' · ')||'-']).concat([['집계 대상',validRows.toLocaleString(),(new Set(pm.map(p=>p.id))).size.toLocaleString(),'개인·월 단위 '+pm.length.toLocaleString()+'건']]));
   const gRows=[...gStat.entries()].sort((a,b)=>b[1].rows-a[1].rows).map(([k,o])=>[esc(k),o.rows.toLocaleString(),o.ids.size.toLocaleString(),S.exG.has(norm(k==='(빈칸)'?'':k))?'<span class="tag bad">제외</span>':'<span class="tag ok">포함</span>']);
   const rRows=[...rStat.entries()].sort((a,b)=>b[1].rows-a[1].rows).map(([k,o])=>{
-    const kk=k==='(빈칸)'?'':k; const st=S.exR.has(norm(kk))?'<span class="tag bad">제외(목록)</span>':(kk&&S.prefix.includes(kk.trim().charAt(0).toUpperCase())?'<span class="tag bad">제외(M·T 시작)</span>':'<span class="tag ok">포함</span>');
+    const kk=k==='(빈칸)'?'':k; const st=S.exR.has(norm(kk))?'<span class="tag bad">제외(목록)</span>':(kk&&isPrefRank(kk,S)?'<span class="tag bad">제외(M·T·GTJ 시작)</span>':'<span class="tag ok">포함</span>');
     return [esc(k),o.rows.toLocaleString(),o.ids.size.toLocaleString(),st];});
   h+=`<div class="two" style="margin-top:12px"><div><h2>'구분' 값 목록</h2><div class="scrollbox">${miniTable(['구분','행 수','인원','처리'],gRows)}</div></div><div><h2>'직급' 값 목록</h2><div class="note">임원·M·T가 빠짐없이 걸러졌는지 여기서 확인하세요.</div><div class="scrollbox">${miniTable(['직급','행 수','인원','처리'],rRows)}</div></div></div>`;
   // 사업부별 인원 / 지원조직 부서
@@ -525,12 +526,12 @@ function showPerson(id){
   const out=$('qOut'),S=readSettings(),M=parseMap($('mapText').value);
   let rows=RAW.filter(r=>r.id===id); if(S.dedup){const m=new Map();rows.forEach(r=>m.set(r.ym+'|'+r.wk,r));rows=[...m.values()];} if(!rows.length)return;
   const last=rows[rows.length-1];
-  const exTxt=(()=>{const gs=[...new Set(rows.filter(r=>S.exG.has(norm(r.gubun))).map(r=>r.gubun))],rk=S.exR.has(norm(last.rank)),mt=last.rank&&S.prefix.includes(last.rank.trim().charAt(0).toUpperCase());
-    const p=[];const dx=[...new Set(rows.filter(r=>S.exD.some(k=>norm(r.dept||'').includes(k))).map(r=>r.dept))];if(dx.length)p.push('부서 '+dx.join('·')+' 주차 삭제');if(gs.length)p.push('구분 '+gs.join('·')+' 주차 제외');if(rk)p.push('직급 '+last.rank+' (제외 목록)');if(mt)p.push('직급 '+last.rank+' (M·T 시작)');return p.join(' / ');})();
+  const exTxt=(()=>{const gs=[...new Set(rows.filter(r=>S.exG.has(norm(r.gubun))).map(r=>r.gubun))],rk=S.exR.has(norm(last.rank)),mt=last.rank&&isPrefRank(last.rank,S);
+    const p=[];const dx=[...new Set(rows.filter(r=>S.exD.some(k=>norm(r.dept||'').includes(k))).map(r=>r.dept))];if(dx.length)p.push('부서 '+dx.join('·')+' 주차 삭제');if(gs.length)p.push('구분 '+gs.join('·')+' 주차 제외');if(rk)p.push('직급 '+last.rank+' (제외 목록)');if(mt)p.push('직급 '+last.rank+' (M·T·GTJ 시작)');return p.join(' / ');})();
   const pm=RESULT?[...RESULT.A?[]:[]]:[];
   const per=[];
   const g=new Map();
-  rows.forEach(r=>{const h=r.v/RESULT.div;const exc=S.exD.some(k=>norm(r.dept||'').includes(k))||S.exG.has(norm(r.gubun))||S.exR.has(norm(r.rank))||(r.rank&&S.prefix.includes(r.rank.trim().charAt(0).toUpperCase()))||(S.excZero&&!(h>0));
+  rows.forEach(r=>{const h=r.v/RESULT.div;const exc=S.exD.some(k=>norm(r.dept||'').includes(k))||S.exG.has(norm(r.gubun))||S.exR.has(norm(r.rank))||(r.rank&&isPrefRank(r.rank,S))||(S.excZero&&!(h>0));
     let o=g.get(r.ym);if(!o){o={sum:0,n:0,total:0,ex:0,dept:r.dept,wn:-1};g.set(r.ym,o);}o.total++;if(exc){o.ex++;return;}
     o.sum+=Math.min(S.cap,Math.max(S.floor,h));o.n++;if(r.wn>=o.wn){o.wn=r.wn;o.dept=r.dept;}});
   const body=[...g.entries()].sort().map(([ym,o])=>`<tr><td>${mLabel(ym)}</td><td>${esc(o.dept)}</td><td>${o.n?f1(o.sum/o.n):'-'}</td><td>${o.n}</td><td>${o.ex}</td></tr>`).join('');
