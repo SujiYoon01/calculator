@@ -70,7 +70,7 @@ th.q{background:#C9D7EA}
     <summary>① 계산 기준 (기본값은 합의된 기준이에요. 바꾸면 바로 다시 계산돼요)</summary>
     <div class="grid">
       <label>제외할 '구분' 값 (쉼표 구분)<textarea id="exGubun">근태예외자, T직군</textarea></label>
-      <label>제외할 '직급' 값 (쉼표 구분, 정확히 일치)<textarea id="exRank">디자이너, 부사장, 비상근고문, 사외이사, 상무, 헬스키퍼, 헬스키퍼(단), 헬스키퍼(전), 회장, 차랑관리자, 차량관리자, 전무, 사장, 부회장, 대표이사, 이사, 고문, 감사, 사내이사</textarea></label>
+      <label>제외할 '직급' 값 (쉼표 구분, 정확히 일치)<textarea id="exRank">디자이너, 부사장, 비상근고문, 사외이사, 상무, 헬스키퍼, 헬스키퍼(단), 헬스키퍼(전), 회장, 전무, 사장, 부회장, 대표이사, 이사, 고문, 감사, 사내이사</textarea></label>
       <label>이 글자로 시작하는 '직급' 제외<input type="text" id="prefix" value="M, T"></label>
       <label>주 근무시간 하한 / 상한 (시간)<span style="display:flex;gap:6px"><input type="number" id="floor" value="40" step="0.5" style="width:90px"><input type="number" id="cap" value="52" step="0.5" style="width:90px"></span></label>
       <label>'52시간 근무자' 기준 (월평균 이상)<input type="number" id="over" value="52" step="0.1"></label>
@@ -514,4 +514,3 @@ document.querySelectorAll('#settings input,#settings textarea,#settings select')
 </script>
 </body>
 </html>
-
