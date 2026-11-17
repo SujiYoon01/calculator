@@ -60,6 +60,7 @@ th.q{background:#C9D7EA}
     <div>
       <button class="btn" id="loadBtn">CSV 불러오기 (여러 개 선택 가능)</button>
       <input type="file" id="fileInput" accept=".csv,.txt" multiple hidden>
+      <button class="btn" id="saveBtn" hidden>화면 저장 (HTML)</button>
       <button class="btn ghost" id="clearBtn">초기화</button>
     </div>
   </div>
@@ -198,7 +199,7 @@ function ingest(text,fname){
 }
 $('loadBtn').onclick=()=>$('fileInput').click();
 $('clearBtn').onclick=()=>{RAW=[];FILES=[];RESULT=null;$('fileInput').value='';clearErr();
-  ['tab0','tab1','tab2'].forEach(i=>$(i).innerHTML='');$('qOut').innerHTML='';$('diag').hidden=true;$('tabs').hidden=true;
+  ['tab0','tab1','tab2'].forEach(i=>$(i).innerHTML='');$('qOut').innerHTML='';$('diag').hidden=true;$('tabs').hidden=true;$('saveBtn').hidden=true;
   $('status').textContent='CSV 파일을 불러와 주세요. 파일은 이 브라우저 안에서만 처리되고 어디에도 전송·저장되지 않습니다.';};
 $('fileInput').onchange=async e=>{
   const files=[...e.target.files]; if(!files.length) return; clearErr();
@@ -332,7 +333,7 @@ function compute(){
   renderExcel({S,BU_LIST,months,periods,mv,rv,nv,perV,quad,refX,refY,depts,spaceAll});
   const ids=new Set(pm.map(p=>p.id));
   $('status').innerHTML=`불러온 파일: ${esc(FILES.join(' · '))}<br>전체 ${RAW.length.toLocaleString()}행 → 중복 ${dup.toLocaleString()}행 제거 → 집계 대상 ${validRows.toLocaleString()}행 · ${ids.size.toLocaleString()}명 · ${months.map(mLabel).join(', ')} · 단위: ${unitNote}`;
-  $('tabs').hidden=false; $('diag').hidden=false;
+  $('tabs').hidden=false; $('diag').hidden=false; $('saveBtn').hidden=false;
   if($('q').value.trim()) doSearch();
 }
 
@@ -538,6 +539,30 @@ function showPerson(id){
     ${exTxt?`<div class="note"><span class="tag bad">집계 제외 사유</span> ${esc(exTxt)}</div>`:''}
     <div class="scroll"><table><tr><th>월</th><th>부서(마지막 주차)</th><th>월평균(보정 후)</th><th>집계 주차 수</th><th>제외된 주차 수</th></tr>${body}<tr class="hl"><td>전체</td><td>-</td><td>${f1(avgAll)}</td><td>-</td><td>-</td></tr></table></div></div>`;
 }
+
+/* ================= 화면 저장 (스냅샷 HTML) ================= */
+$('saveBtn').onclick=()=>{
+  if(!RESULT) return;
+  const S=readSettings(), R=RESULT, ml=R.months.map(mLabel);
+  const doc=document.documentElement.cloneNode(true);
+  const q=x=>doc.querySelector(x);
+  // 원본 CSV 데이터는 DOM에 없으므로 포함되지 않음. 인원 검색(개인 정보)·업로드·설정 입력 영역은 숨김
+  q('#qOut').innerHTML=''; q('#tab3').style.display='none'; q('#tabs [data-t="3"]').style.display='none';
+  q('.topbar > div').style.display='none'; q('#settings').style.display='none'; q('#err').style.display='none';
+  doc.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',i===0));
+  doc.querySelectorAll('#tabs .tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.t==='0'));
+  const now=new Date(), stamp=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0')+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+  const L=(k,v)=>`<tr><td class="nm" style="width:200px">${k}</td><td style="text-align:left;white-space:normal">${esc(v)}</td></tr>`;
+  const card=`<div class="card"><h2>저장된 화면 (스냅샷)</h2><div class="note">${stamp} 저장 · 원본 CSV 데이터는 들어 있지 않아요. 표의 복사·CSV 저장 버튼은 그대로 쓸 수 있어요.</div>
+    <div class="scroll"><table>${L('집계 기간',ml[0]+' ~ '+ml[ml.length-1])}${L('제외 구분',splitList($('exGubun').value).join(', '))}${L('제외 직급',splitList($('exRank').value).join(', '))}${L('직급 첫 글자 제외',S.prefix.join(', '))}${L('삭제할 부서명 포함 글자',splitList($('exDept').value).join(', '))}${L('주별 보정','하한 '+S.floor+'시간 / 상한 '+S.cap+'시간')}${L('52시간 근무자 기준','개인 월평균 '+S.over+'시간 이상')}${L('위험군 구간',S.b.join(' / ')+'시간')}${L('0시간·빈칸 주차',S.excZero?'제외':'포함')}${L('중복 행(사번+년월+주차)',S.dedup?'제거':'유지')}</table></div></div>`;
+  q('#diag').insertAdjacentHTML('beforebegin',card);
+  q('title').textContent='근무시간 백데이터 '+ml[0]+'~'+ml[ml.length-1]+' (저장본 '+stamp.slice(0,10)+')';
+  const html='<!DOCTYPE html>\n'+doc.outerHTML;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'}));
+  a.download='근무시간_백데이터_'+ml[0]+'-'+ml[ml.length-1]+'_저장본_'+stamp.slice(0,10).replace(/-/g,'')+'.html';
+  document.body.appendChild(a);a.click();a.remove();
+};
 $('qBtn').onclick=doSearch;$('q').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch();});
 
 /* ================= 초기화 ================= */
