@@ -98,6 +98,7 @@ th.q{background:#C9D7EA}
     <button class="tab-btn" data-t="1">사분면</button>
     <button class="tab-btn" data-t="2">우주사업부 부서별</button>
     <button class="tab-btn" data-t="3">인원 검색</button>
+    <button class="tab-btn" data-t="4">엑셀 차트용 표</button>
   </div>
 
   <div class="tab active" id="tab0"></div>
@@ -111,6 +112,7 @@ th.q{background:#C9D7EA}
       <div id="qOut"></div>
     </div>
   </div>
+  <div class="tab" id="tab4"></div>
   <div class="foot">※ 이 파일에는 데이터가 저장되지 않아요. CSV는 열 때마다 새로 불러와야 하고, 실제 CSV는 GitHub 등에 올리지 마세요. 표 오른쪽 위 '복사'는 엑셀·워드에 바로 붙여넣을 수 있는 형식이에요.</div>
 </div>
 
@@ -320,6 +322,7 @@ function compute(){
   renderCompare({S,BU_LIST,months,periods,mv,rv,nv,perV,rankOf});
   renderQuad({quad,refX,refY});
   renderSpace({periods,depts,spaceAll,S});
+  renderExcel({S,BU_LIST,months,periods,mv,rv,nv,perV,quad,refX,refY,depts,spaceAll});
   const ids=new Set(pm.map(p=>p.id));
   $('status').innerHTML=`불러온 파일: ${esc(FILES.join(' · '))}<br>전체 ${RAW.length.toLocaleString()}행 → 중복 ${dup.toLocaleString()}행 제거 → 집계 대상 ${validRows.toLocaleString()}행 · ${ids.size.toLocaleString()}명 · ${months.map(mLabel).join(', ')} · 단위: ${unitNote}`;
   $('tabs').hidden=false; $('diag').hidden=false;
@@ -423,6 +426,33 @@ function lineChart(host,labels,series,fmt){
   });
   let lx=L;series.forEach(se=>{s+=`<line x1="${lx}" x2="${lx+18}" y1="${Hh-12}" y2="${Hh-12}" stroke="${se.color}" stroke-width="3"/><text x="${lx+22}" y="${Hh-8}" font-size="11" fill="#444">${se.name}</text>`;lx+=118;});
   host.innerHTML=s+'</svg>';
+}
+
+
+/* ================= 엑셀 차트용 표 탭 ================= */
+function renderExcel(c){
+  const {S,months,periods,mv,rv,nv,perV,quad,refX,refY,depts,spaceAll}=c;
+  const n1=v=>v==null||isNaN(v)?'':(Math.round(v*10)/10).toFixed(1), n2=v=>v==null||isNaN(v)?'':(Math.round(v*100)/100).toFixed(2);
+  const orgs=[...REPORT_ORGS,'전사'];
+  const tbl=(heads,rows)=>`<tr>${heads.map(h=>`<th>${h}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map((x,i)=>`<td${i===0?' class="nm"':''}>${x}</td>`).join('')}</tr>`).join('')}`;
+  const monthly=fn=>tbl(['월',...orgs],months.map(m=>[mLabel(m),...orgs.map(o=>n1(fn(o,m)))]));
+  const quarterly=fn=>tbl(['사업부',...periods.map(p=>p.label)],orgs.map(o=>[o,...periods.map(p=>n1(perV(fn,o,p.months)))]));
+  const last=periods.length-1;
+  const how='엑셀 A1 셀에 붙여넣기 → 표 전체 선택 → 삽입 > 차트. 숫자만 들어 있어서 그대로 차트가 돼요. 값이 없는 칸은 빈칸이에요.';
+  const g=d=>{const t=d.gn||1;return [d.name,d.n,...d.g.map(x=>n1(x/t*100))];};
+  $('tab4').innerHTML=
+    `<div class="card"><h2>엑셀 차트용 표</h2><div class="note">보고서 차트를 엑셀에서 다시 그릴 때 쓰는 표예요. 단위·%·순위 표기를 빼고 숫자만 넣었고, 꺾은선·막대 차트가 바로 되도록 방향을 맞췄어요(월/분기 = 행, 조직 = 열). 복사 버튼으로 복사해 엑셀에 붙여넣으세요. ${how}</div></div>`+
+    tcard('① 월별 평균 근무시간 (시간) — 꺾은선',how,monthly(mv))+
+    tcard('② 월별 52시간 근무자 비율 (%) — 꺾은선','기준: 개인 월평균 '+f1(S.over)+'시간 이상 인원 ÷ 해당 월 인원.',monthly(rv))+
+    tcard('③ 분기별 평균 근무시간 (시간) — 막대/보고서 표',how,quarterly(mv))+
+    tcard('④ 분기별 52시간 근무자 비율 (%) — 막대/보고서 표','',quarterly(rv))+
+    tcard('⑤ 사분면 차트용 (X = 평균 근무시간, Y = 월별 표준편차) — 분산형(XY)','분산형 차트로 만들고, 마지막 두 행(전사 평균·평균 표준편차)은 기준선 위치에 쓰세요. 점 이름은 데이터 레이블로 붙이면 돼요.',
+      tbl(['구분','X 평균 근무시간','Y 표준편차','유형'],[...quad.map(q=>[q.o,n1(q.x),n2(q.y),q.type]),['기준선: 전사 평균(X)',n1(refX),'',''],['기준선: 평균 표준편차(Y)','',n2(refY),'']]))+
+    (spaceAll?tcard('⑥ 우주사업부 부서별 평균 근무시간 (시간) — 가로 막대','기간별 값이에요. 마지막 열(전체 평균) 또는 원하는 분기 열만 골라 차트로 만드세요. 마지막 행은 우주사업부 전체예요.',
+      tbl(['부서','인원',...periods.map(p=>p.label)],[...depts,spaceAll].map(d=>[d.name,d.n,...d.per.map(n1)]))):'')+
+    (spaceAll?tcard('⑦ 우주사업부 부서별 위험군 구성비 (%) — 100% 누적 막대','개인의 전체 기간 평균 기준 4개 그룹이에요. 그룹1 '+S.b[0]+'시간 미만 / 그룹2 '+S.b[0]+'~'+S.b[1]+' / 그룹3 '+S.b[1]+'~'+S.b[2]+' / 그룹4 '+S.b[2]+'시간 이상. 행 합계는 100%예요.',
+      tbl(['부서','인원','그룹1','그룹2','그룹3','그룹4'],[...depts,spaceAll].map(g))):'')+
+    tcard('⑧ 사업부별 월별 집계 인원 (명)','분모로 쓴 인원이에요.',tbl(['월',...orgs],months.map(m=>[mLabel(m),...orgs.map(o=>nv(o,m)==null?'':nv(o,m))])));
 }
 
 /* ================= 사분면 탭 ================= */
